@@ -38,9 +38,6 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# try on HPCC
-try/*
-
 # R package manual genrated by devtools
 man/*
 
