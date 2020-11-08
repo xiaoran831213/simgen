@@ -38,7 +38,7 @@ mvn <- function (N=1, M=0, V=NULL, drop=TRUE)
 
 #' Force Positive Definite
 #' @noRD
-fpd <- function(x, eps=NULL, min=eps)
+fpd <- function(x, eps=NULL)
 {
     if (is.null(eps))
         eps <- sqrt(.Machine$double.eps)
@@ -47,8 +47,15 @@ fpd <- function(x, eps=NULL, min=eps)
     d <- e$values
     u <- e$vectors
 
-    d <- d - min(d) + eps
-    u %*% (t(u) * d)
+    d[d < eps] <- eps
+    x <- u %*% (t(u) * d)
+    x <- 0.5 * (x + t(x))
+    x
+}
+
+min.evl <- function(x)
+{
+    min(eigen(x, TRUE, TRUE)$values)
 }
 
 

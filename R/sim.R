@@ -22,13 +22,19 @@ hwe <- function(x, m=NULL, ...)
 
 #' Get a correlation matrix
 #' @noRd
-cmx <- function(L, alpha=0.9, beta=alpha, ...)
+cmx <- function(L, alpha=0.9, beta=alpha, rho=0, ...)
 {
     ## correlation
     R <- matrix(0, L, L)
+
+    ## draw the lower triangle
     R[lower.tri(R)] <- 2 * rbeta(L * (L - 1) / 2, alpha, beta) - 1
     R <- R + t(R)
     diag(R) <- 1
+
+    ## boost
+    if(!is.null(rho) && rho != 0)
+        R <- cov2cor(R + rho)
     R <- fpd(R) # force PD
     cov2cor(R)
 }
