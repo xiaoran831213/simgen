@@ -21,8 +21,14 @@ hwe <- function(x, m=NULL, ...)
 }
 
 #' Get a correlation matrix
+#'
+#' @examples
+#' rho <- cmx(500)
+#' print(rho[1:5, 1:5])
+#' summary(rho[lower.tri(rho)])
+#' 
 #' @noRd
-cmx <- function(L, alpha=0.9, beta=alpha, rho=0, ...)
+cmx <- function(L, alpha=0.9, beta=alpha, ...)
 {
     ## correlation
     R <- matrix(0, L, L)
@@ -33,9 +39,11 @@ cmx <- function(L, alpha=0.9, beta=alpha, rho=0, ...)
     diag(R) <- 1
 
     ## boost
-    if(!is.null(rho) && rho != 0)
-        R <- cov2cor(R + rho)
-    R <- fpd(R) # force PD
+    u <- tcrossprod(2 * rbeta(L, log(L) * 2, log(L) * 2) - 1) * L
+    R <- cov2cor(R + u)
+
+    ## force PD
+    R <- fpd(R)
     cov2cor(R)
 }
 
