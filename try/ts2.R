@@ -22,44 +22,28 @@ main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
         i2 <- which(x >= q1)
         x[i0] <- 0; x[i1] <- 1; x[i2] <- 2; x
     }
-    Sz <- 1000 ## sample size
+    ssz <- 1000 ## sample size
     oo <- 100 ## number of simulations
     L <- 5 ## number of observed predictors
     LL <- L + 20*L ## number of observed + unobserved predictors
     n.traits <- 4
     n.conf <- max(L, n.traits)
     ## Generate correlation matrices for predictors and outcome
-    R <- matrix(1, LL, LL); R[lower.tri(R)] <- sort(2*rbeta(LL*(LL-1)/2, 0.25, 0.25) - 1)
-    R <- (R * lower.tri(R)) + t(R * lower.tri(R)); diag(R) <- 1
-    u <- 2*(2*(rbeta(LL, 0.25, 0.25) - 0.5))
-    R <- cov2cor(R + u %*% t(u))
-    RR <- as.matrix(nearPD(R, corr=TRUE, maxit=1000, posd.tol = 1e-5)$mat)
-    R <- RR[1:L, 1:L]
-    ##
-    P <- matrix(1, n.traits, n.traits)
-    P[lower.tri(P)] <- sort(2*rbeta(n.traits*(n.traits-1)/2, 1, 1) - 1)
-    P <- (P * lower.tri(P)) + t(P * lower.tri(P)); diag(P) <- 1
-    u <- 2*(2*(rbeta(n.traits, 1, 1) - 0.5))
-    P <- cov2cor(P + u %*% t(u))
-    P <- as.matrix(nearPD(P, corr=TRUE, posd.tol = 1e-5)$mat)
-    ## Correlation for confounders
-    S <- matrix(1, n.conf, n.conf)
-    ##S[lower.tri(S)] <- 0
-    S[lower.tri(S)] <- sort(2*rbeta(n.conf*(n.conf-1)/2, 1, 1) - 1)
-    S <- (S * lower.tri(S)) + t(S * lower.tri(S)); diag(S) <- 1
-    u <- 2*(2*(rbeta(n.conf, 0.25, 0.25) - 0.5))
-    S <- cov2cor(S + u %*% t(u))
-    S <- as.matrix(nearPD(S, corr=TRUE, posd.tol = 1e-5)$mat)
+    RR <- cmx(LL)      # all SNPs
+    R <- RR[1:L, 1:L]  # observed SNPs
+    P <- cmx(n.traits) # traits
+    S <- cmx(n.conf)   # confounders
     ##
     p.tq <- p.dot <- p.tq.res <- p.dot.res <- rep(NA, oo)
     p.tq2 <- p.dot2 <- p.tq2.res <- p.dot2.res <- rep(NA, oo)
     ##
     ##set.seed(1234)
     ii <- 1
-    for(ii in 1:oo) {
-        Conf <- mvrnorm(n=Sz, mu=rep(0, n.conf), Sigma=S) ## confounders
-        X <- mvrnorm(n=Sz, mu=rep(0, LL), Sigma=RR)
-        X[,1:L] <- X[,1:L] + Conf[,1:L]/n.conf
+    for(ii in 1:oo)
+    {
+        Conf <- mvn(ssz, 0, S)                    # confounders
+        X <- mvn(ssz, 0, RR)                      # SNPs
+        X[, 1:L] <- X[, 1:L] + Conf[, 1:L]/n.conf # conf affect SNPs
         MAF <- runif(L, 0.05, 0.95)
         ff <- list(); for(i in 1:L) ff[[i]] <- c(MAF[i]^2, 2*MAF[i]*(1-MAF[i]) + MAF[i]^2)
         for(i in 1:L) { X[,i] <- HWE.quantiles(X[,i], ff[[i]]) }
@@ -68,7 +52,7 @@ main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
         B <-  X[,1:L]
         X.prod <- A[, rep(seq(ncol(A)), each=ncol(B))] * B[, rep(seq(ncol(B)), ncol(A))] ## kronecker on rows of A,B
         np <- dim(X.prod)[2]
-        Y <- mvrnorm(n=Sz, mu=rep(0,n.traits), Sigma=P) + Conf[,1:n.traits]/n.conf
+        Y <- mvrnorm(n=ssz, mu=rep(0,n.traits), Sigma=P) + Conf[,1:n.traits]/n.conf
         if(1) {
             for(i in 1:n.traits) {
                 eff.prod <- 0.05*runif(np, -1, 1)
@@ -149,12 +133,12 @@ main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
     cat(ecdf(p.tq)(0.05),  ecdf(p.tq.res)(0.05), ecdf(p.dot)(0.05), ecdf(p.dot.res)(0.05), "\n")
     cat(ecdf(p.tq2)(0.05), ecdf(p.tq2.res)(0.05), ecdf(p.dot2)(0.05), ecdf(p.dot2.res)(0.05), "\n")
 
-    (((Sz-1) / Sz) * tt.res) / t.check
-    (((Sz-2) / Sz) * tt.res) / t.check
-    (((Sz-3) / Sz) * tt.res) / t.check
-    (((Sz-4) / Sz) * tt.res) / t.check
-    1 / ( (((Sz-5) / Sz) * tt.res) / t.check )
-    1 / ( (((Sz-6) / Sz) * tt.res) / t.check )
+    (((ssz-1) / ssz) * tt.res) / t.check
+    (((ssz-2) / ssz) * tt.res) / t.check
+    (((ssz-3) / ssz) * tt.res) / t.check
+    (((ssz-4) / ssz) * tt.res) / t.check
+    1 / ( (((ssz-5) / ssz) * tt.res) / t.check )
+    1 / ( (((ssz-6) / ssz) * tt.res) / t.check )
 
 
     ##x1 <- p.tq.res
