@@ -29,10 +29,10 @@ main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
     n.traits <- 4
     n.conf <- max(L, n.traits)
     ## Generate correlation matrices for predictors and outcome
-    RR <- cmx(LL)      # all SNPs
-    R <- RR[1:L, 1:L]  # observed SNPs
-    P <- cmx(n.traits) # traits
-    S <- cmx(n.conf)   # confounders
+    RR <- cmx(LL, rho=log(LL)) # all SNPs
+    R <- RR[1:L, 1:L]          # observed SNPs
+    P <- cmx(n.traits)         # traits
+    S <- cmx(n.conf)           # confounders
     ##
     p.tq <- p.dot <- p.tq.res <- p.dot.res <- rep(NA, oo)
     p.tq2 <- p.dot2 <- p.tq2.res <- p.dot2.res <- rep(NA, oo)
