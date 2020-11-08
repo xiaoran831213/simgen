@@ -26,7 +26,7 @@ cmx <- function(L, alpha=0.9, beta=alpha, ...)
 {
     ## correlation
     R <- matrix(0, L, L)
-    R[lower.tri(R)] <- sort(2 * rbeta(L * (L - 1) / 2, alpha, beta) - 1)
+    R[lower.tri(R)] <- 2 * rbeta(L * (L - 1) / 2, alpha, beta) - 1
     R <- R + t(R)
     diag(R) <- 1
     R <- fpd(R) # force PD
