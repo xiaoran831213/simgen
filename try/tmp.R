@@ -7,14 +7,14 @@
 #' @param nsd SD of noise
 main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
 {
-    ## v2: take Y^2, Yi*Yj, rather than X^2, Xi*Xj
     library(CompQuadForm)
     library(MASS)
     library(Matrix)
-    ## library(globaltest)
 
-    set.seed(1234)
+    ## Include.Cov=1 currently works with Tq, but not DOT!!!!
+    Include.Cov <- 1
 
+    ## set.seed(12345)
     HWE.quantiles <- function(x, f) {
         q0 <- quantile(x,f)[1]; q1 <- quantile(x,f)[2]
         i0 <- which(x < q0)
@@ -22,12 +22,15 @@ main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
         i2 <- which(x >= q1)
         x[i0] <- 0; x[i1] <- 1; x[i2] <- 2; x
     }
-    Sz <- 1000 ## sample size
-    oo <- 100 ## number of simulations
-    L <- 5 ## number of observed predictors
-    LL <- L + 20*L ## number of observed + unobserved predictors
-    n.traits <- 4
+
+    Sz <- 1000 # sample size
+    oo <- 100 # number of simulations
+    Non.linear.effects  <- 1
+    L <- 4 # number of observed predictors
+    LL <- L + 25*L # number of observed + unobserved predictors
+    n.traits <- 5
     n.conf <- max(L, n.traits)
+
     ## Generate correlation matrices for predictors and outcome
     R <- matrix(1, LL, LL); R[lower.tri(R)] <- sort(2*rbeta(LL*(LL-1)/2, 0.25, 0.25) - 1)
     R <- (R * lower.tri(R)) + t(R * lower.tri(R)); diag(R) <- 1
@@ -35,29 +38,30 @@ main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
     R <- cov2cor(R + u %*% t(u))
     RR <- as.matrix(nearPD(R, corr=TRUE, maxit=1000, posd.tol = 1e-5)$mat)
     R <- RR[1:L, 1:L]
-    ##
+                                        #
     P <- matrix(1, n.traits, n.traits)
     P[lower.tri(P)] <- sort(2*rbeta(n.traits*(n.traits-1)/2, 1, 1) - 1)
     P <- (P * lower.tri(P)) + t(P * lower.tri(P)); diag(P) <- 1
     u <- 2*(2*(rbeta(n.traits, 1, 1) - 0.5))
     P <- cov2cor(P + u %*% t(u))
     P <- as.matrix(nearPD(P, corr=TRUE, posd.tol = 1e-5)$mat)
-    ## Correlation for confounders
+                                        # Correlation for confounders
     S <- matrix(1, n.conf, n.conf)
-    ##S[lower.tri(S)] <- 0
+                                        #S[lower.tri(S)] <- 0
     S[lower.tri(S)] <- sort(2*rbeta(n.conf*(n.conf-1)/2, 1, 1) - 1)
     S <- (S * lower.tri(S)) + t(S * lower.tri(S)); diag(S) <- 1
-    u <- 2*(2*(rbeta(n.conf, 0.25, 0.25) - 0.5))
+    u <- 2*(2*(rbeta(n.conf, 1, 1) - 0.5))
     S <- cov2cor(S + u %*% t(u))
-    S <- as.matrix(nearPD(S, corr=TRUE, posd.tol = 1e-5)$mat)
-    ##
+    S <- as.matrix(nearPD(S, corr=TRUE, posd.tol = 1e-3)$mat)
+                                        #
     p.tq <- p.dot <- p.tq.res <- p.dot.res <- rep(NA, oo)
-    p.tq2 <- p.dot2 <- p.tq2.res <- p.dot2.res <- rep(NA, oo)
-    ##
-    ##set.seed(1234)
+    p.tq.var <- p.dot.var <- p.tq.var.res <- p.dot.var.res <- rep(NA, oo)
+    p.tq.cov <- p.dot.cov <- p.tq.cov.res <- p.dot.cov.res <- rep(NA, oo)
+                                        #set.seed(1234)
     ii <- 1
-    for(ii in 1:oo) {
-        Conf <- mvrnorm(n=Sz, mu=rep(0, n.conf), Sigma=S) ## confounders
+    for(ii in 1:oo)
+    {
+        Conf <- mvrnorm(n=Sz, mu=rep(0, n.conf), Sigma=S) # confounders
         X <- mvrnorm(n=Sz, mu=rep(0, LL), Sigma=RR)
         X[,1:L] <- X[,1:L] + Conf[,1:L]/n.conf
         MAF <- runif(L, 0.05, 0.95)
@@ -66,111 +70,85 @@ main <- function(N=1e2, L=5, M=5, P=2, nsd=5)
         X <- scale(X)
         A <- X[, (L+1):LL]
         B <-  X[,1:L]
-        X.prod <- A[, rep(seq(ncol(A)), each=ncol(B))] * B[, rep(seq(ncol(B)), ncol(A))] ## kronecker on rows of A,B
+        X.prod <- A[, rep(seq(ncol(A)), each=ncol(B))] * B[, rep(seq(ncol(B)), ncol(A))] # kronecker on rows of A,B
         np <- dim(X.prod)[2]
         Y <- mvrnorm(n=Sz, mu=rep(0,n.traits), Sigma=P) + Conf[,1:n.traits]/n.conf
-        if(1) {
+        if(0) { # <-- HA or H0?
             for(i in 1:n.traits) {
-                eff.prod <- 0.05*runif(np, -1, 1)
-                effects <- 0.05*runif(LL, -1, 1) ## effects <- rep(0, LL)    
-                Y[,i] <- Y[,i] + 0.5*c(X %*% effects) + 0.5*c(X.prod %*% eff.prod) + 0.5*sqrt(c(X^2 %*% abs(effects)))
-                ##Y[,i] <- Y[,i] + 0.5*c(abs(X) %*% abs(effects))
-                ##Y[,i] <- Y[,i] + 0.2*c(X %*% effects) + sqrt(c(X^2 %*% abs(effects)))
+                eff.prod <- 0.1*runif(np, -1, 1)
+                effects <- 0.1*runif(LL, -1, 1)
+                if(Non.linear.effects) {
+                    Y[,i] <- Y[,i] + 0.1*c(X %*% effects) + 0.25*c(X.prod %*% eff.prod) + 0.5*sqrt(c(X^2 %*% abs(effects)))
+                } else {
+                    Y[,i] <- Y[,i] + c(X %*% effects)
+                }
             }
         }
-        if(ii==1) print(cor(Y))
-        X <- X[,1:L] ## drop "unobserved" part
-        Conf <- cbind(Conf, Y)
-        Y <- cbind(Y, Y^2)
-        for(i in 1 : (n.traits-1)) {
-            for(j in (i+1) : n.traits) Y <- cbind(Y, Y[,i]*Y[,j])
-        }
-        Y <- Y[,-c(1 : n.traits)]
-        ##cor(Y)
+        if(ii==1 && dim(Y)[2] < 9) print(cor(Y))
+        X <- X[,1:L] # drop "unobserved" part
         X <- scale(X)
         Y <- scale(Y)
-############ Swap Y and X?
-        ##Y.tmp  <- Y; X.tmp <- X; Y <- X.tmp; X <- Y.tmp
-############
-        nY <- dim(Y)[2]
         nX <- dim(X)[2]
-        Cr <- ginv(ginv( cor(cbind(X,Conf)) )[1:nX, 1:nX])
-        tt.res <- tt <- t.check <- rep(0, nY*nX)
-        tt2.res <- tt2 <- rep(0, n.traits*nX)
-        v <- u <- 1
-        for(i in 1:nY) {
-            Y.res <- lm(Y[,i] ~ Conf)$residuals
+        Cr <- ginv(ginv( cov(cbind(X,Conf)) )[1:nX, 1:nX])
+        Z <- NULL;
+
+        for(i in 1 : dim(Y)[2]) {
             for(j in 1:nX) {
-                tt[v] <- summary(lm(Y[,i] ~ X[, j] + Conf))$coefficients[2,3]
-                ## NOTE: tt.res[v] --> sqrt(Cr[j,j])*tt[v]
-                tt.res[v] <- summary(lm(Y.res ~ X[, j]))$coefficients[2,3]
-                t.check[v] <- sqrt(Cr[j,j])*tt[v]
-                if(i <= n.traits) {
-                    tt2[u] <- tt[v]
-                    tt2.res[u] <- tt.res[v]
-                    u <- u+1
+                Z <- cbind(Z, lm(Y[,i] ~ X[,j])$residuals)
+            }
+        }
+        Z <- scale(Z)
+        nZ <- dim(Z)[2]
+        nY <- n.traits
+        Z <- cbind(Z, Z^2)
+        if(Include.Cov) {
+            for(i in 1 : (n.traits-1)) {
+                for(j in (i+1) : n.traits) {
+                    nY <- nY + 1
+                    for(k in 1:nX) {
+                        Z <- cbind(Z, Z[,i+k-1]*Z[,j+k-1])
+                    }
                 }
+            }
+        }
+        Z <- Z[, -c(1 : nZ)]
+        Z <- scale(Z)
+        ld <- kronecker(matrix(1, nrow = dim(Z)[2]/dim(Cr)[2], ncol = dim(Z)[2]/dim(Cr)[2]), Cr)
+        Zcov <- cor(Z) * ld
+        if(ii==1) {
+            Zcov.all <- Zcov; ttm <- matrix(nrow=oo, ncol=nY*nX)
+        } else {
+            Zcov.all <- Zcov.all + Zcov
+        }
+        tt <- rep(0, nY*nX)
+        v <- 1
+        for(i in 1:nY) {
+            for(j in 1:nX) {
+                tt[v] <- summary(lm(Z[,v] ~ X[,j] + Conf))$coefficients[2,3]
                 v <- v+1
             }
         }
-        e1 <- eigen(cor(Y), symmetric = TRUE)
-        e2c <- eigen(cov2cor(Cr), symmetric = TRUE)
-        eigva <- kronecker(e1$values, e2c$values)
-        eivec <- kronecker(e1$vectors, e2c$vectors)
+        ttm[ii,] <- tt
+        ee <- eigen(cov2cor(Zcov), symmetric = TRUE)
+        eigva <- ee$values
+        eivec <- ee$vectors
+        (p.tq[ii] <- davies(sum(tt^2), lambda = eigva)$Qq)
+        Le <- length(eigva)
+        for(j in 2:length(eigva)) { if(eigva[j] < 5e-2) { Le <- j-1; break }}
+        eigva <- eigva[1 : Le]
+        eivec <- eivec[, 1 : Le]
         sD <- diag(sqrt(1/eigva))
         pc <- eivec %*% sD %*% t(eivec)
-        p.tq[ii] <- davies(sum(tt^2), lambda = eigva)$Qq
-        p.dot[ii] <- 1 - pchisq(sum( (tt %*% pc)^2 ), df = nY*nX)
-        e2 <- eigen(Cr, symmetric = TRUE)
-        eigva <- kronecker(e1$values, e2$values)
-        eivec <- kronecker(e1$vectors, e2$vectors)
-        sD <- diag(sqrt(1/eigva))
-        pc <- eivec %*% sD %*% t(eivec)
-        p.tq.res[ii] <- davies(sum(tt.res^2), lambda = eigva)$Qq
-        p.dot.res[ii] <- 1 - pchisq(sum( (tt.res %*% pc)^2 ), df = nY*nX)
-        ## analysis without Yi*Yj
-        nY <- n.traits ## use only Y^2, drop Yi*Yj
-        e1 <- eigen(cor(Y[,1:nY]), symmetric = TRUE)
-        eigva <- kronecker(e1$values, e2c$values)
-        eivec <- kronecker(e1$vectors, e2c$vectors)
-        sD <- diag(sqrt(1/eigva))
-        pc <- eivec %*% sD %*% t(eivec)
-        p.tq2[ii] <- davies(sum(tt2^2), lambda = eigva)$Qq
-        p.dot2[ii] <- 1 - pchisq(sum( (tt2 %*% pc)^2 ), df = nY*nX)
-        eigva <- kronecker(e1$values, e2$values)
-        eivec <- kronecker(e1$vectors, e2$vectors)
-        sD <- diag(sqrt(1/eigva))
-        pc <- eivec %*% sD %*% t(eivec)
-        p.tq2.res[ii] <- davies(sum(tt2.res^2), lambda = eigva)$Qq
-        p.dot2.res[ii] <- 1 - pchisq(sum( (tt2.res %*% pc)^2 ), df = nY*nX)
+        (p.dot[ii] <- 1 - pchisq(sum( (tt %*% pc)^2 ), df = Le))
         if(!(ii %% 10)) cat(".", ii, ".", sep=""); if(!(ii %% 100)) cat("\r")
     }
     cat("\n")
-    cat(ecdf(p.tq)(0.05),  ecdf(p.tq.res)(0.05), ecdf(p.dot)(0.05), ecdf(p.dot.res)(0.05), "\n")
-    cat(ecdf(p.tq2)(0.05), ecdf(p.tq2.res)(0.05), ecdf(p.dot2)(0.05), ecdf(p.dot2.res)(0.05), "\n")
+    Zcor <- cov2cor(Zcov.all/oo)
+    a <- 0.05
+    cat(ecdf(p.tq)(a),  ecdf(p.dot)(a), "\n")
 
-    (((Sz-1) / Sz) * tt.res) / t.check
-    (((Sz-2) / Sz) * tt.res) / t.check
-    (((Sz-3) / Sz) * tt.res) / t.check
-    (((Sz-4) / Sz) * tt.res) / t.check
-    1 / ( (((Sz-5) / Sz) * tt.res) / t.check )
-    1 / ( (((Sz-6) / Sz) * tt.res) / t.check )
+    plot(p.tq, p.dot)
 
-
-    ##x1 <- p.tq.res
-    ##x2 <- p.tq
-    ##x3 <- p.dot.res
-    ##x4 <- p.dot
-
-    ##par(mfrow=c(2,2))
-    ##plot(x1 , p.tq.res)
-    ##plot(x2 , p.tq)
-    ##plot(x3 , p.dot.res)
-    ##plot(x4 , p.dot)
-
-    ##par(mfrow=c(2,2))
-    ##plot(p.tq2.res , p.tq.res)
-    ##plot(p.tq2 , p.tq)
-    ##plot(p.dot2.res , p.dot.res)
-    ##plot(p.dot2 , p.dot)
+    i <- min(12, dim(ttm)[2])
+    cor(ttm)[1:i,1:i]; Zcor[1:i,1:i]
 }

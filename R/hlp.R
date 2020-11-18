@@ -67,3 +67,33 @@ std <- function(x, c=TRUE, s=TRUE, ...)
     attr(r, 'scaled:scale') <- NULL
     r
 }
+
+#' Compute Polynomials
+#'
+#' @param x matrix of basic terms
+#' @param d degrees to compute
+#' @param t number of terms allowed
+#' @return polynomial terms expanded from the given basic terms.
+.p <- function(x, d=NULL, t=NULL)
+{
+    if(!is.matrix(x))
+        dim(x) <- c(length(x), 1L)
+    d <- d %||% 1
+    t <- t %||% seq.int(max(d))
+
+    ## get polynomial
+    x <- poly(x, degree=max(d), raw=TRUE, simple=TRUE)
+
+    ## select by degree
+    x <- x[, attr(x, 'degree') %in% d, drop=FALSE]
+
+    ## select by terms
+    . <- rowSums(do.call(rbind, strsplit(colnames(x), "[.]")) != "0")
+    x <- x[, . %in% t, drop=FALSE]
+
+    ## clean up
+    attr(x, 'class') <- NULL
+    attr(x, 'degree') <- NULL
+
+    x
+}

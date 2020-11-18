@@ -1,4 +1,4 @@
-`%||%` <- function(x, v) if(is.null(x)) v else x
+`%||%` <- function(x, v) if(is.null(x) || length(x)==0) v else x
 
 #' Create data frame
 #'
