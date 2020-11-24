@@ -49,14 +49,36 @@ flood <- function(x, e=parent.frame())
 #' @noRd
 get.arg <- function(skp=NULL)
 {
+    ## default arguments
+    f <- formals(sys.function(sys.parent()))
+    f <- f[names(f) != "..."]
+
+    ## calling arguments
     a <- as.list(match.call(sys.function(1), sys.call(1), expand.dots=TRUE))
     a <- lapply(a[-1], function(.)
     {
         switch(class(.), call=deparse(.), name=as.character(.), .)
     })
 
-    ## drop NULL(s) and return
+    d <- setdiff(names(f), names(a))
+    a[d] <- f[d]
+    
+    ## drop NULL
     a <- a[!sapply(a, is.null)]
+
+    ## skip
     a <- a[!names(a) %in% skp]
+
+    ## return
     do.call(data.frame, c(a, list(stringsAsFactors=FALSE)))
+}
+
+#' Flatten a matrix or array to a vector
+#'
+#' @param x a matrix or array
+#' @return vectorized `x`
+flatten <- function(x)
+{
+    dim(x) <- NULL
+    x
 }

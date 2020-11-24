@@ -73,12 +73,15 @@ gwa_lm <- function(model, ...)
         rsp <- resid(lm(rsp ~   1))
     else
         rsp <- resid(lm(rsp ~ ror))
+    rsp <- as.matrix(rsp)
 
     ## model
     mdl <- if(is.null(cvr)) y ~ g else y ~ g + cvr
 
     ## z-scores
-    zsc <- matrix(0, ncol(gmx), ncol(rsp))
+    nms <- list(colnames(gmx), colnames(rsp))
+    zsc <- matrix(0, ncol(gmx), ncol(rsp), dim=nms)
+    pvl <- matrix(1, ncol(gmx), ncol(rsp), dim=nms)
     for(i in seq(ncol(gmx)))
     {
         for(j in seq(ncol(rsp)))
@@ -87,9 +90,10 @@ gwa_lm <- function(model, ...)
             y <- rsp[, j]
             m <- lm(mdl)
             zsc[i, j] <- summary(m)$coef[2, 3]
+            pvl[i, j] <- summary(m)$coef[2, 4]
         }
     }
-    zsc
+    list(zsc=zsc, pvl=pvl)
 }
 
 
@@ -105,8 +109,8 @@ gwa_cst <- function(md, ...)
         rsp <- resid(lm(rsp ~   1))
     else
         rsp <- resid(lm(rsp ~ ror))
-    rsp <- cor(rsp)
-
+    rsp <- cor(as.matrix(rsp))
+    
     ## get correlation among genotype, controlled for covariates
     cvr <- frm_mtx(rh, ...) # covariate
     gmx <- frm_mtx(gt, ...) # genotype

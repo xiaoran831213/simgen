@@ -5,7 +5,7 @@
 #' @param P  # of casual variants
 #' @param M  # of covariates
 #' @param nsd SD of noise
-tst <- function(N=1e2, L=5, M=5, P=2, nsd=5)
+ts2 <- function(N=1e2, L=5, M=5, P=2, nsd=5)
 {
     ## v2: take Y^2, Yi*Yj, rather than X^2, Xi*Xj
     library(CompQuadForm)
@@ -34,13 +34,13 @@ tst <- function(N=1e2, L=5, M=5, P=2, nsd=5)
     ii <- 1
     for(ii in 1:oo)
     {
-        Conf <- mvn(ssz, 0, S)                    # confounders
-        X <- mvn(ssz, 0, RR)                      # SNPs
-        X[, 1:L] <- X[, 1:L] + Conf[, 1:L]/n.conf # confounders on SNPs
-        X[, 1:L] <- hwe(X[, 1:L])                 # discretize SNPs
-        X <- std(X)                               #
-        A <- X[, (L+1):LL]                        # unobserbed
-        B <-  X[,1:L]                             # SNPs, observed
+        Conf <- mvn(ssz, 0, S)                      # confounders
+        X <- mvn(ssz, 0, RR)                        # SNPs
+        X[, 1:L] <- X[, 1:L] + Conf[, 1:L] / n.conf # confounders on SNPs
+        X[, 1:L] <- hwe(X[, 1:L])                   # discretize SNPs
+        X <- std(X)                                 #
+        A <- X[,(L+1):LL]                           # unobserbed
+        B <-  X[,1:L]                               # SNPs, observed
         X.prod <- frm_mtx(~B:A)
         np <- dim(X.prod)[2]
 

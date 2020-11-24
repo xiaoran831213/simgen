@@ -6,7 +6,7 @@
 #' summary(rho[lower.tri(rho)])
 #' 
 #' @noRd
-sim_vcs <- function(L, alpha=0.9, beta=alpha, ...)
+sim_vcs <- function(L, alpha=1, beta=alpha, ...)
 {
     ## correlation
     R <- matrix(0, L, L)
@@ -54,50 +54,21 @@ sim_cor <- function(size, alpha=1, beta=alpha, center=0, debug=0, ...)
     r
 }
 
-## make dosage genotype
-#' Simulation formula
-#'
-#' @examples
-#' f <- Y(3, d=2) | Z(2) * U ~ A(3, "g") + .p(B(5, "g"), 2, 1) + v(.9) | E(5) * F(2) + v(.1)
-#' r <- sim_frm(f)
-sim_frm <- function(model, ...)
+sim_dsg <- function(x, type, ...)
 {
-    env <- environment(model)
-    ## separate left and right side, divided by bars "|".
-    lhs <- frm_bar(frm_lhs(model))
-    rhs <- frm_bar(frm_rhs(model))
-
-    ## get terms
-    lht <- lapply(lapply(sapply(lhs, terms), attr, "factors"), rownames)
-    rht <- lapply(lapply(sapply(rhs, terms), attr, "factors"), rownames)
-    
-    ## variable names
-    ## lhv <- lapply(lht, sub, pattern="[(].*[)]", replacement="")
-    ## rhv <- lapply(rht, sub, pattern="[(].*[)]", replacement="")
-    
-    ## ## data generation parameters
-    ## tmp <- lapply(lht, gsub, pattern="^[^(]*", replacement="")
-    ## lhp <- lapply(tmp, gsub, pattern="^$", replacement="()")
-    ## tmp <- lapply(rht, gsub, pattern="^[^(]*", replacement="")
-    ## rhp <- lapply(tmp, gsub, pattern="^$", replacement="()")
-    
-    ## ## data generation calls
-    ## lhc <- mapply(lhv, lhp, FUN=function(v, p) paste0(v, " <- sim_par", p))
-    ## rhc <- mapply(rhv, rhp, FUN=function(v, p) paste0(v, " <- sim_par", p))
-    
-    ## lhc <- lapply(lhc, function(blk)
-    ## {
-    ##     blk <- lapply(blk, function(exe)
-    ##     {
-    ##         eval(str2lang(exe))
-    ##     })
-    ##     blk
-    ## })
-    ## lhc
-    rht
+    dot <- list(...)
+    fun <- paste0("as.", type)
+    do.call(fun, c(x, dot))
 }
 
-## parameters for the 1st moment
+
+## parameters for the left hand side (i.e., response variables)
+pa0 <- function(size=1, ...)
+{
+    list(size=size, ...)
+}
+
+## parameters for the right hand, 1st moment
 pa1 <- function(size=1, type=c("numeric", "integer", "genotype"), ...)
 {
     dict <- c(numeric=1, genotype=2)
@@ -106,15 +77,23 @@ pa1 <- function(size=1, type=c("numeric", "integer", "genotype"), ...)
     list(size=size, type=type, ...)
 }
 
-pa2 <- function(vars, type=c("rand", "diag", "ones"), alpha=NULL, beta=NULL, ...)
+## parameters for the right hand, 2nd moment
+pa2 <- function(vars, type=c(diag=1, rand=2, ones=3), alpha=NULL, beta=NULL, ...)
 {
+    dict <- eval(formals(sys.function())$type, parent.frame())
+    errm <- paste(paste(names(dict), dict, sep="="), collapse=", ")
     v <- all.vars(substitute(vars))
     a <- alpha %||% 1
     b <- beta  %||% 1
     i <- Inf
-    if(is.character(type))
-        type <- match.arg(type)
-
+    if(missing(type))
+        type <- dict[1]
+    else if(is.character(type))
+        type <- match.arg(type, names(dict))
+    else if(is.numeric(type) && type %in% seq_along(dict))
+        type <- dict[type]
+    else
+        stop("must choose from (", errm, ")")
     pars <- switch(
         type,
         rand=list(alpha=a, beta=b),
@@ -123,88 +102,207 @@ pa2 <- function(vars, type=c("rand", "diag", "ones"), alpha=NULL, beta=NULL, ...
     c(list(vars=v), pars)
 }
 
-ex1 <- function(N=20)
+#' Simulate design matrix
+#'
+#' @examples
+#' mu <- "A(2, 'g') + B(3, 'g') + C(2, 'n') + D(2, 'n')"
+#' sg <- "Ph(A, 'd') + 2 @ LD(B, a=8, b=1) + .5 @ CV(B + C, a=1, b=7) + .2 @ JS(D, 'o')"
+#' fm <- as.formula(paste("~", mu, "|", sg))
+#' print(fm)
+#'
+#' res <- sim_dsg(fm, 1e3)
+#'
+#' ## data
+#' print(round(head(res$raw), 3))
+#' print(round(head(res$dsg), 3))
+#' 
+#' ## correlation / LD
+#' print(res$vcs)       # model suggested
+#' sapply(res$dat, cor) # empirical
+sim_dsg <- function(model, N=5e2)
 {
-    mu <- "A(2, 'g') + B(3, 'g') + C(2, 'n') + D(2, 'i')"
-    ## sg <- "Phi(A, 'd') + 2 @ LD(B, 'r', a=.2, b=.2) + .5 @ CV(B + C, 'r', a=4, b=4)"
-    sg <- "Phi(A, 'd') + 2 @ LD(B, 'r', a=.2, b=.2) + .5 @ CV(C, 'r', a=4, b=4)"
-    fm <- paste(mu, "|", sg)
-    frm <- as.formula(paste("~", fm))
-    env <- environment()
-
+    ## env <- environment()
+    env <- parent.frame()
     ## separate the mm1 and mm2
-    . <- strsplit(fm, " *[|] *")[[1]]
+    . <- strsplit(as.character(model)[2], " *[|] *")[[1]]
     mm1 <- as.formula(paste("~", .[1])) # 1st moment - mean
     mm2 <- as.formula(paste("~", .[2])) # 2nd moment - covariance structure
     
     ## -------- treat 1st moment, mm1 --------
-    ## extract coefficients
-    . <- colnames(attr(terms(mm1), "factors"))
-    co1 <- as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .)))
-    mm1 <- as.formula(paste("~", paste(sub("^.*@", "", .), collapse = "+")))
-    ## extract inner terms
+    ## extract coefficients, full terms, and names
     . <- rownames(attr(terms(mm1), "factors"))
-    rgx <- regexpr("[A-z][^(]*([(][^()]*[)])", .) # match
-    tm1 <- regmatches(., rgx)                     # terms
-    nm1 <- sub("[(].*[)]$", "", tm1)              # names
-
-    ## substitute inner terms with names
-    . <- as.character(mm1)[2]
-    rgx <- gregexpr("[A-z][^(]*([(][^()]*[)])", .) # match
-    fc1 <- regmatches(., rgx)                      # terms
-    regmatches(., rgx) <- lapply(fc1, sub, pattern="[(].*[)]$", replacement="")
-    mm1 <- as.formula(paste("~", .))
+    co1 <- as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .)))
+    tm1 <- sub("^.*@", "", .)        # terms
+    nm1 <- sub("[(].*[)]$", "", tm1) # names
+    names(co1) <- nm1
     
     ## parse inner term parameters
     fn1 <- sapply(sub("^[^(]*", "pa1", tm1), str2lang) # parse
     names(fn1) <- nm1
-    dt1 <- lapply(fn1, eval, env)                      #
-    
+    fn1 <- lapply(fn1, eval, env)                      #
+
     ## -------- treat the 2nd moment, mm2 --------
     ## extract coefficients
-    . <- colnames(attr(terms(mm2), "factors"))
+    . <- colnames(frm_fct(mm2))
     co2 <- as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .)))
-    mm2 <- as.formula(paste("~", paste(sub("^.*@", "", .), collapse = "+")))
 
-    . <- rownames(attr(terms(mm2), "factors"))
+    . <- rownames(frm_fct(mm2))
     rgx <- regexpr("[A-z][^(]*([(][^()]*[)])", .) # match
     tm2 <- regmatches(., rgx)                     # terms
     nm2 <- sub("[(].*[)]$", "", tm2)              # names
-    
-    ## substitute inner terms with names
-    . <- as.character(mm2)[2]
-    rgx <- gregexpr("[A-z][^(]*([(][^()]*[)])", .) # match
-    fc2 <- regmatches(., rgx)                      # terms
-    regmatches(., rgx) <- lapply(fc2, sub, pa="[(].*[)]$", re="")
-    mm2 <- as.formula(paste("~", .))
+    names(co2) <- nm2
 
     ## parse inner term parameters
     fn2 <- sapply(sub("^[^(]*", "pa2", tm2), str2lang) # parse
     names(fn2) <- nm2
-    dt2 <- lapply(fn2, eval, env)                      #
+    fn2 <- lapply(fn2, eval, env)                      #
 
     ## -------- generate data --------
-    dm1 <- sapply(dt1, `[[`, 'size') # dimensions
-    mk1 <- rep(nm1, dm1)             # masks
-    
-    ## variance and covariance structure (vcs)
-    vcs <- lapply(dt2, function(par)
+    vsz <- sapply(fn1, `[[`, 'size') # variable dimensions
+    vcn <- rep(nm1, vsz)             # variable column names
+    vcs <- list()                    # variance covariance struct
+    ## raw matrix
+    raw <- matrix(0, N, sum(vsz), dimnames=list(NULL, vcn))
+    for(. in names(fn2))
     {
-        msk <- ! mk1 %in% par$vars
-        par <- c(size=sum(dm1), par)
-        ret <- do.call(sim_cor, par)
-        ret[msk, msk] <- 0
-        ret
-    })
-    sgm <- Reduce("+", mapply("*", co2, vcs, SIMPLIFY = FALSE))
-    ## raw data
-    raw <- mvn(N, 0, sgm)
-    
-    list(tm1=tm1, fn1=fn1, dt1=dt1, mm1=mm1, co1=co1,
-         tm2=tm2, fn2=fn2, dt2=dt2, mm2=mm2, co2=co2,
-         vcs=vcs, sgm=sgm, raw=raw)
+        msk <- vcn %in% fn2[[.]]$vars # column mask
+        vcs[[.]] <- do.call(sim_cor, c(size=sum(msk), fn2[[.]]))
+        colnames(vcs[[.]]) <- vcn[msk]
+        rownames(vcs[[.]]) <- vcn[msk]
+        raw[, msk] <- raw[, msk] + mvn(N, 0, co2[.] * vcs[[.]])
+    }
+    ## design matrix and data
+    dsg <- raw
+    dat <- list()
+    for(. in names(fn1))
+    {
+        msk <- vcn == .
+        fun <- paste0("as.", fn1[[.]]$type)
+        dsg[, msk] <- do.call(fun, c(list(x=raw[, msk]), fn1[[.]])) * co1[.]
+        dat[[.]] <- dsg[, msk, drop=FALSE]
+    }
+
+    ## return
+    list(tm1=tm1, fn1=fn1, mm1=mm1, co1=co1,
+         tm2=tm2, fn2=fn2, mm2=mm2, co2=co2,
+         vcs=vcs, raw=raw, dsg=dsg, dat=dat)
 }
 
+#' Simulate response
+#'
+#' mu <- "A(2, 'g') + B(3, 'g') + C(2, 'n') + D(2, 'n')"
+#' sg <- "Ph(A, 'd') + 2 @ LD(B, a=7, b=1) + .5 @ CV(B + C, a=1, b=6) + .2 @ JS(D, 'd')"
+#' fm <- as.formula(paste("~", mu, "|", sg))
+#' print(fm)
+#' dt <- sim_dsg(fm, 1e3)
+#' 
+#' md <- Y(4) + Z(2) ~ .5 @ A + .p(B, 2) + .5 @ B : C + D | .5 @ A
+#' md <- Y(4) + Z(2) ~ 0 @ A + .p(B, 2) + .5 @ B : C + D
+#' md <- Y(4) + Z(2) ~ 0 | .5 @ A + 2 @ .p(B, 2) + 2 @ B : C + D
+#' rs <- sim_rsp(md, dt$dat)
+sim_rsp <- function(model, data=NULL)
+{
+    if(is.null(data))
+        env <- parent.frame()
+    else
+    {
+        flood(data)
+        env <- environment()
+    }
+    ## separate left and right hand size
+    lhs <- frm_lhs(model)
+    rhs <- frm_rhs(model)
+
+    ## check variables for sample size
+    . <- lapply(all.vars(rhs), get, env)
+    N <- sapply(., nrow)
+    N <- unlist(N[!sapply(N, is.null)])
+    stopifnot(length(unique(N)) == 1)
+    N <- unique(N)
+    
+    ## separate mm1 and mm2
+    mm1 <- frm_lbs(rhs) # 1st moment - mean
+    mm2 <- frm_rbs(rhs) # 2nd moment - variance
+    
+    ## -------- treat mm1 --------
+    if(frm_is0(mm1))
+    {
+        dt1 <- matrix(0, N, 0)
+        sz1 <- numeric()
+        co1 <- numeric()
+    }
+    else if(frm_is1(mm1))
+    {
+        dt1 <- matrix(1, N, 1, dimnames=list(NULL, "It"))
+        sz1 <- list(Int=1)
+        co1 <- 1
+    }
+    else
+    {
+        ## extract coefficients
+        . <- colnames(attr(terms(mm1), "factors"))
+        co1 <- sub("@.*$", "", sub("^[^@]*$", "1", .))
+        co1 <- lapply(lapply(co1, str2lang), eval, parent.frame())
+        tm1 <- sub("^.*@", "", .) # terms
+        ## get data
+        . <- sapply(paste0("~", tm1), as.formula, env=env)
+        dt1 <- lapply(., frm_mtx, simplify = FALSE)
+        sz1 <- lapply(dt1, ncol)  # size(s)
+        dt1 <- do.call(cbind, dt1)
+    }
+    
+    ## -------- treat mm2 --------
+    ## extract coefficients
+    if(frm_is0(mm2))
+    {
+        dt2 <- matrix(0, N, 0)
+        sz2 <- numeric()
+        co2 <- numeric()
+    }
+    else if(frm_is1(mm2))
+    {
+        dt2 <- matrix(1, N, 1, dimnames=list(NULL, "It"))
+        sz2 <- list(Int=1)
+        co2 <- 1
+    }
+    else
+    {
+        . <- colnames(attr(terms(mm2), "factors"))
+        co2 <- as.list(as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .))))
+        tm2 <- sub("^.*@", "", .) # terms
+        ## get data
+        . <- sapply(paste("~", tm2), as.formula, env=env)
+        dt2 <- sapply(., frm_mtx, simplify = FALSE)
+        sz2 <- lapply(dt2, ncol) # size(s)
+        dt2 <- do.call(cBind, dt2)
+    }
+    
+    ## -------- treat response --------
+    . <- rownames(attr(terms(lhs), "factors"))
+    co0 <- as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .)))
+    tm0 <- sub("^.*@", "", .)        # terms
+    nm0 <- sub("[(].*[)]$", "", tm0) # names
+    ## parse inner term parameters
+    fn0 <- sapply(sub("^[^(]*", "pa0", tm0), str2lang) # parse
+    names(fn0) <- nm0
+    fn0 <- lapply(fn0, eval, env)                      #
+    sz0 <- sapply(fn0, `[[`, 'size')                   # sizes
+    cn0 <- rep(nm0, sz0)                               # column names
+    ## generate
+    .r0 <- function(n, s) rnorm(n, 0, s)
+    ef1 <- lapply(cn0, function(.) unlist(mapply(.r0, sz1, co1, SIMPLIFY=FALSE)))
+    ef2 <- lapply(cn0, function(.) unlist(mapply(.r0, sz2, co2, SIMPLIFY=FALSE)))
+    rsp <- mapply(function(e1=NULL, e2=NULL)
+    {
+        m <- if(is.null(e1)) 0 else dt1 %*% e1
+        v <- if(is.null(e2)) 1 else log(1 + exp(dt2 %*% e2))
+        rnorm(N, m, sqrt(v))
+    },
+    ef1, ef2)
+    colnames(rsp) <- rep(nm0, sz0)
+    
+    rsp
+}
 
 
 #' Discretizing dosage by Hardy-Weinberg Equilibrium
@@ -213,7 +311,7 @@ ex1 <- function(N=20)
 #' @param m vector of allele frequencies
 #' @return allele dosage in  {0, 1, 2}  with frequency {m^2, 2*m*(1-m), (1-m)^2}
 #' @noRd
-hwe <- function(x, m=NULL, ...)
+as.genotype <- function(x, m=NULL, ...)
 {
     if (is.null(m))
         m <- runif(ncol(x), 0.05, 0.45)

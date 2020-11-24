@@ -1,6 +1,6 @@
-mtq <- function(Z, C, D=NULL, eps=NULL, ...)
+mtq <- function(Z, C, D=NULL, tol.egv=NULL, ...)
 {
-    eps <- eps %||%  sqrt(.Machine$double.eps)
+    tol.egv <- tol.egv %||%  sqrt(.Machine$double.eps)
     D <- D %||% 1
     dim(Z) <- NULL
 
@@ -10,11 +10,12 @@ mtq <- function(Z, C, D=NULL, eps=NULL, ...)
     d <- kronecker(D, C)
     dim(d) <- NULL
 
-    . <- d > max(d) * eps
+    . <- d > max(d) * tol.egv
     if(!all(.))
         d <- d[  .]
     L <- length(d)              # effective number of eigen
 
-    P <- davies(sum(Z^2), lambda = d)$Qq
-    list(d=d, L=L, P=P)
+    Q <- imhof(sum(Z^2), d, delta=rep(0, L))$Qq
+    ## P <- davies(sum(Z^2), lambda = d)$Qq
+    list(d=d, L=L, P=Q)
 }

@@ -1,3 +1,5 @@
+frm_fct <- function(f) attr(terms(f), "factors")
+
 frm_lhs <- function(f, ret=0)
 {
     e <- environment(f)
@@ -21,6 +23,32 @@ frm_rhs <- function(f, ret=0)
     f
 }
 
+frm_lbs <- function(f, ret=0)
+{
+    e <- environment(f)
+    f <- as.character(f)
+    f <- f[length(f)]
+    f <- strsplit(f, "[|]")[[1]][1]
+    if(ret == 0)
+        f <- as.formula(paste("~", f), e)
+    f
+}
+
+frm_rbs <- function(f, ret=0)
+{
+    e <- environment(f)
+    f <- as.character(f)
+    f <- f[length(f)]
+    f <- strsplit(f, "[|]")[[1]]
+    if(length(f) < 2)
+        f <- 0
+    else
+        f <- f[2]
+    if(ret == 0)
+        f <- as.formula(paste("~", f), e)
+    f
+}
+
 frm_bar <- function(rhs, ...)
 {
     e <- environment(rhs)
@@ -31,6 +59,15 @@ frm_bar <- function(rhs, ...)
     unname(f)
 }
 
+frm_is0 <- function(f, ...)
+{
+    attr(terms(f), "intercept") == 0 && length(all.vars(f)) == 0
+}
+
+frm_is1 <- function(f, ...)
+{
+    attr(terms(f), "intercept") == 1 && length(all.vars(f)) == 0
+}
 
 frm_cat <-function(..l, ..r, ..o="~")
 {
@@ -48,10 +85,7 @@ frm_mtx <- function(f, ...)
 {
     if(is.null(f))
         return(NULL)
-
     x <- model.matrix(update.formula(f, ~ . - 1), ...)
     attr(x, "assign") <- NULL
-    unname(x)
+    x
 }
-
-
