@@ -33,10 +33,10 @@ scp <- function(X, C)
 {
     ## C can be names, numbers, or Boolean masks, turn them into index
     if(is.character(C))
-        i <- colnames(X) %in% C
-    if(is.logical(i))
-        i <- which(i)
-    i <- unname(i)
+        C <- colnames(X) %in% C
+    if(is.logical(C))
+        C <- which(C)
+    i <- unname(C)
     
     ## A <- X[-C, -C]
     ## B <- X[-C, +C]
@@ -60,21 +60,32 @@ nsp <- function(C, D=NULL, tol.egv=NULL, ...)
 
     C <- eigen(C, TRUE)
     D <- eigen(D, TRUE)
+
+    d1 <- D$values
+    d2 <- C$values
+    i1 <- d1 > max(d1) * tol.egv
+    i2 <- d2 > max(d2) * tol.egv
+    d1 <- d1[i1]
+    d2 <- d2[i2]
+    u1 <- D$vectors[, i1]
+    u2 <- C$vectors[, i2]
+    d <- kronecker(d1, d2)
+    u <- kronecker(u1, u2)
     
-    d <- kronecker(D$values, C$values)
-    u <- kronecker(D$vectors, C$vectors)
-    dim(d) <- NULL
+    ## d <- kronecker(D$values, C$values)
+    ## u <- kronecker(D$vectors, C$vectors)
     
     ## positive eigen values
-    . <- d > max(d) * tol.egv
-    if(!all(.))
-    {
-        d <- d[  .]
-        u <- u[, .]
-    }
+    ## . <- d > max(d) * tol.egv
+    ## if(!all(.))
+    ## {
+    ##     d <- d[  .]
+    ##     u <- u[, .]
+    ## }
     L <- length(d)              # effective number of eigen
     
     ## square root
+    dim(d) <- NULL
     d <- sqrt(1/d)
     H <- u %*% (d * t(u))       # U diag(d) U'
     H <- 0.5 * (H + t(H))
@@ -102,8 +113,8 @@ mdt <- function(Z, C, D=NULL, tol.cor=NULL, tol.egv=NULL, ...)
     ## trim collinear variants
     m <- dvt(C, tol.cor)
     M <- sum(m)                      # effective number of variants
+    Z <- c(Z[m, ])
     C <- C[m, m]
-    Z <- c(matrix(Z, nrow(D), ncol(C))[, m])
     
     ret <- nsp(C, D, tol.egv=tol.egv, ...)
     H <- ret$H

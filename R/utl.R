@@ -1,5 +1,5 @@
 `%||%` <- function(x, v) if(is.null(x) || length(x)==0) v else x
-
+`%c%` <- function(x, v) {x[[length(x) + 1]] <- v; x}
 #' Create data frame
 #'
 #' A wrapper  for R \code{data.frame},  which ensures that string  variables not

@@ -16,11 +16,19 @@ gwa_frm <- function(model, ...)
     rh <- paste(collapse="+", rh[rh != ""])
     
     ## from the l-hand side, separate residual regresion term(s)
-    pt <- "-[^-+]*"
-    rr <- regmatches(lh, gregexpr(pt, lh), invert=0)[[1]]
-    lh <- regmatches(lh, gregexpr(pt, lh), invert=1)[[1]]
-    rr <- paste(collapse="+", gsub("-", "", rr[rr != ""]))
-    lh <- paste(collapse="+", gsub("^[+]|[+]$", "", lh[lh != ""]))
+    if(is.null(lh))
+    {
+        lh <- ""
+        rr <- ""
+    }
+    else
+    {
+        pt <- "-[^-+]*"
+        rr <- regmatches(lh, gregexpr(pt, lh), invert=0)[[1]]
+        lh <- regmatches(lh, gregexpr(pt, lh), invert=1)[[1]]
+        rr <- paste(collapse="+", gsub("-", "", rr[rr != ""]))
+        lh <- paste(collapse="+", gsub("^[+]|[+]$", "", lh[lh != ""]))
+    }
     
     ## return
     lh <- if(lh=="") NULL else as.formula(paste("~", lh), en)
@@ -32,7 +40,7 @@ gwa_frm <- function(model, ...)
 }
 
 
-#' GWAS linear model
+#' GWAS Linear Model
 #' @examples
 #'
 #' set.seed(1245)
@@ -68,17 +76,19 @@ gwa_lm <- function(model, ...)
     rsp <- frm_mtx(lh)      # response
     gmx <- frm_mtx(gt, ...) # genotype
     cvr <- frm_mtx(rh, ...) # covariate
-    ror <- frm_mtx(rr)      # residual regression
+    rsr <- frm_mtx(rr)      # residual regression
     if(is.null(rr))
-        rsp <- resid(lm(rsp ~   1))
+    {
+        ## rsp <- resid(lm(rsp ~ 1))
+    }
     else
-        rsp <- resid(lm(rsp ~ ror))
+        rsp <- resid(lm(rsp ~ rsr))
     rsp <- as.matrix(rsp)
 
-    ## model
+    ## model                                                                    
     mdl <- if(is.null(cvr)) y ~ g else y ~ g + cvr
 
-    ## z-scores
+    ## z-scores                                                                 
     nms <- list(colnames(gmx), colnames(rsp))
     zsc <- matrix(0, ncol(gmx), ncol(rsp), dim=nms)
     pvl <- matrix(1, ncol(gmx), ncol(rsp), dim=nms)
@@ -93,31 +103,28 @@ gwa_lm <- function(model, ...)
             pvl[i, j] <- summary(m)$coef[2, 4]
         }
     }
-    list(zsc=zsc, pvl=pvl)
+    list(rsp=rsp, rsr=rsr, cvr=cvr, gmx=gmx, zsc=zsc, pvl=pvl)
 }
 
 
-gwa_cst <- function(md, ...)
+#' GWA Partial LD
+gwa_pld <- function(model, ...)
 {
-    ## extract the rsponse, genotype, and covariate
-    flood(gwa_frm(md, ...))
+    ## rsponse(lh), genotype(gt), residual regressor(rr) and covariate(rh)
+    flood(gwa_frm(model, ...))
 
-    ## get correlation among response variables
-    rsp <- frm_mtx(lh)      # response
-    ror <- frm_mtx(rr)      # residual regression
-    if(is.null(ror))
-        rsp <- resid(lm(rsp ~   1))
-    else
-        rsp <- resid(lm(rsp ~ ror))
-    rsp <- cor(as.matrix(rsp))
-    
-    ## get correlation among genotype, controlled for covariates
+    gno <- frm_mtx(gt, ...) # genotype
     cvr <- frm_mtx(rh, ...) # covariate
-    gmx <- frm_mtx(gt, ...) # genotype
-    if(is.null(cvr))
-        gmx <- cor(gmx)
-    else
-        gmx <- ginv(ginv(cor(cbind(gmx, cvr)))[1:ncol(gmx), 1:ncol(gmx)])
+    rsr <- frm_mtx(rr, ...) # residual regresser
 
-    list(gmx=gmx, rsp=rsp)
+    ld <- cor(cbind(rsr, cvr, gno))
+    if(!is.null(cvr))
+        ld <- cov2cor(scp(ld, seq(ncol(cvr))))
+    if(!is.null(rsr))
+        ld <- scp(ld, seq(ncol(rsr)))
+
+    nm <- c(sapply(lapply(all.vars(gt), get, environment(gt)), colnames))
+    colnames(ld) <- nm
+    rownames(ld) <- nm
+    ld
 }

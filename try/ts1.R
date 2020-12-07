@@ -1,69 +1,72 @@
 #' Temporary Test
 #'
 #' @param N  # of samples
-#' @param L  # of variants
-#' @param P  # of casual variants
-#' @param M  # of covariates
+#' @param M  # of traits
 #' @param nsd SD of noise
-test <- function(N=2e2, es1=0, es2=0, eps=1, evt=1e-4, seed=NULL, times=3e3, ...)
+tst1 <- function(N=2e2, M=2, a=0, b=1, e=1, ydt=0, evt=1e-4, seed=NULL, times=1e3, ...)
 {
     arg <- get.arg(skp=c("seed", "out", "times"))
+    psd <- arg$psd %||% evt
     set.seed(seed)
-    
+
     rpt <- list()
+    rhs <- ~G(5) + X(5) | HL(G, a=1, b=1) + LC(X, a=1, b=1)
     for(ii in seq(times))
     {
-        ## mdl <- ~F(1) + G(4) + C(5) | LD(G, a=6, b=1) + CC(C, a=1, b=1)
-        mdl <- ~F(1) + G(4) + C(5) + U(10) | LD(F + G, a=2, b=1) + CC(C, a=.2, b=1) + UC(U, a=0, b=1)
-        rhs <- sim_dsg(mdl, N)
-        flood(rhs$dat)
-        G <- std(G)
-        C <- std(C)
-        Y <- sim_rsp(Y(2) ~ es1 @ G + es2 @ G:U + C)
-        Y <- Y + matrix(rnorm(length(Y)), nrow(Y), ncol(Y)) * eps
-        Y <- std(Y)
-        Y <- Y %*% nsp(cor(Y), NULL)$H
+        flood(sim_dsg(rhs, N, psd=psd)$dat)
+        flood(sim_rsp(Y(M) ~ a @ G + b @ X)$dat)
+        Y <- Y + matrix(rnorm(N * M, 0, e), N, M)
+        ## residual of Y ~ X
+        Z <- as.matrix(resid(lm(Y ~ X)))
+        ## residual of G ~ X
+        J <- as.matrix(resid(lm(G ~ X)))
+
+        cov_J_ <- scp(cor(cbind(G, X)), "X")
+        ## stopifnot(all.equal(cov_J_, cov(J))) # not true
+        cor_J_ <- cov2cor(cov_J_)
+        ## stopifnot(all.equal(cov_J_, cor(J))) # true
         
-        ## cor among Y and X, the latter is controlled of Conf
-        ## Cr <- gwa_cst(Y ~ C + {G})$gmx
-        Cr <- scp(cor(cbind(G, C)), colnames(C))
+        ## de-correlate
+        if(ydt)
+        {
+            Z <- pcs(Z)
+            Y <- pcs(Y)
+        }
 
         ## GWAS between nY and nX
-        tt <- gwa_lm(Y ~ C + {G}) # original t tests
-        rt <- gwa_lm(Y - C ~ {G}) # residual t tests
+        ## t0 <- gwa_lm(Y ~     {G}) # no covariate
+        t0 <- gwa_lm(Y ~ X + {G}) # original t tests
+        t1 <- gwa_lm(Z ~     {G}) # residual t tests
+        t2 <- gwa_lm(Z ~     {J}) # double residual
 
         ## test statistics
         r <- list()
-        Cy <- diag(ncol(Y))
-        r[['TQ1']] <- mtq(tt$zsc, cov2cor(Cr), Cy, tol.egv=evt)
-        r[['DT1']] <- mdt(tt$zsc, cov2cor(Cr), Cy, tol.egv=evt)
-        r[['TQ2']] <- mtq(rt$zsc, Cr, Cy, tol.egv=evt)
-        r[['DT2']] <- mdt(rt$zsc, Cr, Cy, tol.egv=evt)
+        r[['D0a']] <- mdt(t0$zsc, cor(J), cor(Y), tol.egv=evt) #
+        r[['D1a']] <- mdt(t1$zsc, cov_J_, cor(Z), tol.egv=evt) # controlled
+        r[['D2a']] <- mdt(t2$zsc, cor(J), cor(Z), tol.egv=evt) # controlled
+        r[['D2b']] <- mdt(t2$zsc, cor_J_, cor(Z), tol.egv=evt) # controlled
+
+        r[['T0a']] <- mdt(t0$zsc, cor(J), cor(Y), tol.egv=evt) # controlled
+        r[['T1a']] <- mdt(t1$zsc, cov_J_, cor(Z), tol.egv=evt) # controlled
+        r[['T2a']] <- mdt(t2$zsc, cor(J), cor(Z), tol.egv=evt) # controlled
+        r[['T2b']] <- mdt(t2$zsc, cor_J_, cor(Z), tol.egv=evt) # controlled
 
         p <- sapply(r, `[[`, 'P')
         l <- sapply(r, `[[`, 'L')
+
         rpt[[ii]] <- .d(itr=ii, mtd=names(r), pvl=p, egv=l)
+        cgy[[ii]] <- mean(abs(cor(G, Y)))
+        cgx[[ii]] <- mean(abs(cor(G, X)))
+        cxy[[ii]] <- mean(abs(cor(X, Y)))
         if(!(ii %% 10))
+        {
             cat(".", ii, ".", sep=""); if(!(ii %% 100)) cat("\r")
+        }
     }
     set.seed(NULL)
 
-    rpt <- cbind(arg, do.call(rbind, rpt))
-    rownames(rpt) <- NULL
-    pow(rpt)
-}
+    print(c(cxy=mean(unlist(cxy)), cgy=mean(unlist(cgy)), cgx=mean(unlist(cgx))))
 
-pow <- function(rpt)
-{
-    rpt <- subset(rpt, se=-itr)
-    grp <- subset(rpt, se=-c(pvl, egv))
-    rpt <- by(rpt, grp, function(g)
-    {
-        cfg <- subset(g, se=-c(pvl, egv))[1, ]
-        pow <- with(g, mean(pvl <= 0.05))
-        egv <- with(g, mean(egv))
-        cbind(cfg, pow=pow, egv=egv, rep=nrow(g))
-    })
-    rpt <- do.call(rbind, rpt)
-    rpt
+    rpt <- cbind(arg, do.call(rbind, rpt))
+    pow(rpt)
 }

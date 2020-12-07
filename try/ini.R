@@ -1,9 +1,10 @@
 library(CompQuadForm)
 ## library(SKAT)
 library(MASS)
+library(Matrix)
 
 
-for(. in dir("../R", "[.]R$", ful=TRUE))
+for(. in dir("R", "[.]R$", ful=TRUE))
 {
     source(.)
 }

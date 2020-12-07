@@ -47,6 +47,8 @@ fpd <- function(x, eps=NULL)
     d <- e$values
     u <- e$vectors
 
+    if(any(d < eps))
+        d <- d - min(d) + eps
     d[d < eps] <- eps
     x <- u %*% (t(u) * d)
     x <- 0.5 * (x + t(x))
@@ -74,7 +76,7 @@ std <- function(x, c=TRUE, s=TRUE, ...)
 #' @param d degrees to compute
 #' @param t number of terms allowed
 #' @return polynomial terms expanded from the given basic terms.
-.p <- function(x, d=NULL, t=NULL)
+.p <- function(x, d=NULL, t=NULL, o=FALSE)
 {
     if(!is.matrix(x))
         dim(x) <- c(length(x), 1L)
@@ -82,7 +84,7 @@ std <- function(x, c=TRUE, s=TRUE, ...)
     t <- t %||% seq.int(max(d))
 
     ## get polynomial
-    x <- poly(x, degree=max(d), raw=TRUE, simple=TRUE)
+    x <- poly(x, degree=max(d), raw=!o, simple=TRUE)
 
     ## select by degree
     x <- x[, attr(x, 'degree') %in% d, drop=FALSE]
@@ -97,3 +99,5 @@ std <- function(x, c=TRUE, s=TRUE, ...)
 
     x
 }
+
+pcs <- function(x) x %*% svd(x)$v

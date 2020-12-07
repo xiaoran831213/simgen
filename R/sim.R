@@ -15,43 +15,30 @@ sim_vcs <- function(L, alpha=1, beta=alpha, ...)
     R[lower.tri(R)] <- 2 * rbeta(L * (L - 1) / 2, alpha, beta) - 1
     R <- R + t(R)
     diag(R) <- 1
+    R <- nearPD(R, corr=TRUE, posd.tol = 1e-3)$mat
 
     ## boost
-    u <- tcrossprod(2 * rbeta(L, log(L) * 2, log(L) * 2) - 1) * L
-    R <- cov2cor(R + u)
+    ## u <- tcrossprod(2 * rbeta(L, log(L) * 2, log(L) * 2) - 1) * L
+    ## R <- cov2cor(R + u)
 
     ## force PD
-    R <- fpd(R)
+    ## R <- fpd(R)
     cov2cor(R)
 }
 
-sim_cor <- function(size, alpha=1, beta=alpha, center=0, debug=0, ...)
+sim_cor <- function(size, alpha=1, beta=alpha, tol.psd=NULL, ...)
 {
-    ## correlation
-    r <- matrix(0, size, size)
+    tol.psd <- tol.psd %||% sqrt(.Machine$double.eps)
     ## draw the lower triangle
-    if(center)
-        r[lower.tri(r)] <- 2 * rbeta(size * (size - 1) / 2, alpha, beta) - 1
-    else
-        r[lower.tri(r)] <- rbeta(size * (size - 1) / 2, alpha, beta)
+    r <- matrix(0, size, size)
+    r[lower.tri(r)] <- 2 * rbeta(size * (size - 1) / 2, alpha, beta) - 1
     ## make correlation
     r <- r + t(r)
     diag(r) <- 1
-    r <- cov2cor(fpd(r))
-    
-    if(debug)
-    {
-        with(eigen(r, TRUE),
-        {
-            cat("eigen values =\n")
-            print(values)
-            cat("square roots =\n")
-            print(vectors %*% (sqrt(values) * t(vectors)))
-            cat("summary of lower triangle:\n")
-            print(summary(r[lower.tri(r)]))
-        })
-    }
-    r
+    ## enforce PD
+    r <- nearPD(r, corr=TRUE, ensureSymmetry=TRUE, posd.tol=tol.psd)$mat
+    as.matrix(r)
+    ## r <- fpd(r, tol.psd)
 }
 
 sim_dsg <- function(x, type, ...)
@@ -97,7 +84,7 @@ pa2 <- function(vars, type=c(diag=1, rand=2, ones=3), alpha=NULL, beta=NULL, ...
     pars <- switch(
         type,
         rand=list(alpha=a, beta=b),
-        diag=list(alpha=0, beta=1),
+        diag=list(alpha=i, beta=i),
         ones=list(alpha=1, beta=0))
     c(list(vars=v), pars)
 }
@@ -119,7 +106,7 @@ pa2 <- function(vars, type=c(diag=1, rand=2, ones=3), alpha=NULL, beta=NULL, ...
 #' ## correlation / LD
 #' print(res$vcs)       # model suggested
 #' sapply(res$dat, cor) # empirical
-sim_dsg <- function(model, N=5e2)
+sim_dsg <- function(model, N=5e2, psd=NULL)
 {
     ## env <- environment()
     env <- parent.frame()
@@ -166,7 +153,7 @@ sim_dsg <- function(model, N=5e2)
     for(. in names(fn2))
     {
         msk <- vcn %in% fn2[[.]]$vars # column mask
-        vcs[[.]] <- do.call(sim_cor, c(size=sum(msk), fn2[[.]]))
+        vcs[[.]] <- do.call(sim_cor, c(size=sum(msk), fn2[[.]], tol.psd=psd))
         colnames(vcs[[.]]) <- vcn[msk]
         rownames(vcs[[.]]) <- vcn[msk]
         raw[, msk] <- raw[, msk] + mvn(N, 0, co2[.] * vcs[[.]])
@@ -200,7 +187,7 @@ sim_dsg <- function(model, N=5e2)
 #' md <- Y(4) + Z(2) ~ 0 @ A + .p(B, 2) + .5 @ B : C + D
 #' md <- Y(4) + Z(2) ~ 0 | .5 @ A + 2 @ .p(B, 2) + 2 @ B : C + D
 #' rs <- sim_rsp(md, dt$dat)
-sim_rsp <- function(model, data=NULL)
+sim_rsp <- function(model, data=NULL, ...)
 {
     if(is.null(data))
         env <- parent.frame()
@@ -279,9 +266,11 @@ sim_rsp <- function(model, data=NULL)
     
     ## -------- treat response --------
     . <- rownames(attr(terms(lhs), "factors"))
-    co0 <- as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .)))
     tm0 <- sub("^.*@", "", .)        # terms
     nm0 <- sub("[(].*[)]$", "", tm0) # names
+    ## coefficients
+    co0 <- as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .)))
+    names(co0) <- nm0
     ## parse inner term parameters
     fn0 <- sapply(sub("^[^(]*", "pa0", tm0), str2lang) # parse
     names(fn0) <- nm0
@@ -299,9 +288,15 @@ sim_rsp <- function(model, data=NULL)
         rnorm(N, m, sqrt(v))
     },
     ef1, ef2)
-    colnames(rsp) <- rep(nm0, sz0)
+    colnames(rsp) <- cn0
+
+    ## separated data
+    dat <- sapply(nm0, function(.) rsp[, cn0 == .], simplify = FALSE)
     
-    rsp
+    list(tm0=tm0, co0=co0, sz0=sz0, fn0=fn0,
+         mm1=mm1, co1=co1, sz1=sz1, ef1=ef1,
+         mm2=mm2, co2=co2, sz2=sz2, ef2=ef2,
+         dat=dat, rsp=rsp)
 }
 
 
