@@ -7,7 +7,7 @@
 #' @param V matrix of covariance
 #' @param drop TRUE to drop matrix of single sample to a vector
 #' @return N x M matrix of samples
-#' @noRD
+#' @noRd
 mvn <- function (N=1, M=0, V=NULL, drop=TRUE)
 {
     ## default V is for demonstration
@@ -37,7 +37,7 @@ mvn <- function (N=1, M=0, V=NULL, drop=TRUE)
 
 
 #' Force Positive Definite
-#' @noRD
+#' @noRd
 fpd <- function(x, eps=NULL)
 {
     if (is.null(eps))
@@ -101,3 +101,5 @@ std <- function(x, c=TRUE, s=TRUE, ...)
 }
 
 pcs <- function(x) x %*% svd(x)$v
+
+rkn <- function(X)  scale(apply(X, 2, rank))

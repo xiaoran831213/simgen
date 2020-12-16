@@ -20,18 +20,24 @@ mtq <- function(Z, C, D=NULL, tol.egv=NULL, ...)
     list(d=d, L=L, P=P)
 }
 
-pow <- function(rpt)
+BCX <- function(X)
 {
-    rpt <- subset(rpt, se=-itr)
-    grp <- subset(rpt, se=-c(pvl, egv, mcr))
-    rpt <- by(rpt, grp, function(g)
+    apply(X, 2, function(x)
     {
-        cfg <- subset(g, se=-c(pvl, egv))[1, ]
-        pow <- with(g, mean(pvl <= 0.05))
-        egv <- with(g, mean(egv))
-        mcr <- with(g, mean(mcr))
-        cbind(cfg, pow=pow, egv=egv, rep=nrow(g))
+        bestNormalize::boxcox(x)$x.t
     })
-    rpt <- do.call(rbind, rpt)
-    rpt
+}
+
+ORQ <- function(X)
+{
+    if(is.matrix(X))
+    {
+        X <- apply(X, 2, function(x)
+        {
+            qnorm((rank(x) - .5) / length(x))
+        })
+    }
+    else
+        X <- qnorm((rank(X) - .5) / length(X))
+    std(X)
 }

@@ -7,6 +7,12 @@
 #' @noRd
 .d <- function(...) data.frame(..., stringsAsFactors=FALSE)
 
+#' Expand Grid
+#'
+#' A wrapper for R \code{expand.grid}
+.e <- function(...) expand.grid(..., stringsAsFactors = FALSE)
+
+
 #' Flood objects in a container to an environment
 #'
 #' \code{flood} assign named  items in a list to the  calling environment, thus,
@@ -57,7 +63,7 @@ get.arg <- function(skp=NULL)
     a <- as.list(match.call(sys.function(1), sys.call(1), expand.dots=TRUE))
     a <- lapply(a[-1], function(.)
     {
-        switch(class(.), call=deparse(.), name=as.character(.), .)
+        switch(class(.), call=eval(.), name=as.character(.), .)
     })
 
     d <- setdiff(names(f), names(a))

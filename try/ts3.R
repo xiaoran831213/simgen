@@ -1,4 +1,4 @@
-tst1 <- function(N=5e2, M=2, a=0, b=1, d=0, e=1, times=1e3, ...)
+tst3 <- function(N=5e2, M=2, a=0, b=1, d=0, e=1, times=1e3, ...)
 {
     arg <- get.arg(skp=c("seed", "times"))
     evt <- arg$evt %||% 1e-8
@@ -11,27 +11,26 @@ tst1 <- function(N=5e2, M=2, a=0, b=1, d=0, e=1, times=1e3, ...)
     for(ii in seq(times))
     {
         flood(sim_dsg(rhm, N, psd=psd)$dat)
-        ## G <- as.genotype(G)
+        G <- fac(as.genotype(G))
         flood(sim_rsp(lhm)$dat)
         Y <- Y + matrix(rnorm(N * M), N, M) * e # outcomes
-        ## G <- fac(G)
+        Z <- lm(Y ~ X)$resid
         R <- lm(Y ~ X + G)$resid                # residual
         Y <- std(Y)
-        ## G <- rkn(G)
         LHS <- list(
-            `LHS = Y`             = Y,
-            `LHS = Y^2 + Y:Y + Y` = .p(Y, 1:2, 1:2),
-            `LHS = Y^2 + Y:Y`     = .p(Y, 2:2, 1:2),
-            `LHS = R^2 + R:R`     = .p(R, 2:2, 1:2))
+            `LHS = Y`         = Y,
+            `LHS = BCX(Z^2)`  = BCX(.p(Z, 2:2, 1:1)),
+            `LHS = ORQ(Z:Z)`  = ORQ(.p(Z, 2:2, 2:2)),
+            `LHS = Z^2`       = .p(Z, 2:2, 1:1),
+            `LHS = Z:Z`       = .p(Z, 2:2, 2:2),
+            `LHS = R^2 + R:R` = .p(R, 2:2, 1:2))
         MDL <- list(
-            `LHS - X     ~ {G}`   = lhs - X     ~ {G},
-            `LHS - X - Y ~ {G}`   = lhs - X - Y ~ {G})
+            `LHS - X     ~ {G}` = lhs - X     ~ {G},
+            `LHS - X - Y ~ {G}` = lhs - X - Y ~ {G})
         PLD <- lapply(MDL, gwa_pld)
-
         CFG <- rbind(
-            .e(lhs=names(LHS)[1:2], mdl=names(MDL)[1:1]),
-            .e(lhs=names(LHS)[3:3], mdl=names(MDL)[2:2]),
-            .e(lhs=names(LHS)[4:4], mdl=names(MDL)[1:1]))
+            .e(lhs=names(LHS), mdl=names(MDL)[1:1]))
+
         r <- list()
         for(j in seq(nrow(CFG)))
         {

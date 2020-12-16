@@ -72,7 +72,7 @@ gwa_lm <- function(model, ...)
 {
     ## extract the rsponse, genotype, and covariate
     flood(gwa_frm(model, ...))
-
+    
     rsp <- frm_mtx(lh)      # response
     gmx <- frm_mtx(gt, ...) # genotype
     cvr <- frm_mtx(rh, ...) # covariate
@@ -116,14 +116,14 @@ gwa_pld <- function(model, ...)
     gno <- frm_mtx(gt, ...) # genotype
     cvr <- frm_mtx(rh, ...) # covariate
     rsr <- frm_mtx(rr, ...) # residual regresser
-
+    
     ld <- cor(cbind(rsr, cvr, gno))
     if(!is.null(cvr))
         ld <- cov2cor(scp(ld, seq(ncol(cvr))))
     if(!is.null(rsr))
         ld <- scp(ld, seq(ncol(rsr)))
 
-    nm <- c(sapply(lapply(all.vars(gt), get, environment(gt)), colnames))
+    nm <- unlist(sapply(lapply(all.vars(gt), get, environment(gt)), colnames))
     colnames(ld) <- nm
     rownames(ld) <- nm
     ld

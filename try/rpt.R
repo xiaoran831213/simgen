@@ -76,7 +76,8 @@ get.pow <- function(sim, cache=TRUE)
 get.cfg <- function(rpt)
 {
     dct <- c(N="N", a="Genetics", b="Covariates", d="GxU", e="Noise",
-             evt="Min-Eigen", psd="PD-Threshold", rep="Repeats")
+             f="Unobserved", evt="Min-Eigen", psd="PD-Threshold",
+             rep="Repeats")
     unq <- sapply(lapply(rpt, unique), length) < 2
     cfg <- rpt[1, unq]
     str <- dct[colnames(cfg)]
@@ -93,10 +94,15 @@ plt.pow <- function(sim, sub, out=paste0(sim, '.pdf'), ttl=NULL)
         sub <- eval(sub, rpt, parent.frame())
         rpt <- rpt[sub, ]
     }
+
+    ## key valus
+    kdc <- c(hd0="H0: U=0, G+U", hd1="H1: U>0, G+U", hd2="H2: U=0, G*U", hd3="H3: U>0, G*U",
+             ha0="H0: U=0, G=0", ha1="H1: U>0, G=0", ha2="H2, U=0, G>0", ha3="H3: U>0, G>0")
+    kna <- setdiff(unique(rpt$key), names(kdc))
+    kdc[kna] <- kna
     rpt <- within(rpt,
     {
-        ## key <- ifelse(d > 0, "H1: GxU > 0", "H0: GxU = 0")
-        key <- ifelse(a > 0, "H1: G > 0", "H0: G = 0")
+        key <- kdc[key]
         lhs <- base::sub("^LHS = ", "", lhs)
         tag <- mapply(base::sub, list("^LHS"), lhs, mdl)
     })
@@ -124,8 +130,14 @@ plt.pow <- function(sim, sub, out=paste0(sim, '.pdf'), ttl=NULL)
 
 plt.main <- function()
 {
-    plt.pow("run/mx6", out="run/mx6.png")
-    plt.pow("run/mx6", out="run/mx6.pdf")
-    plt.pow("run/mx7", out="run/mx7.png")
-    plt.pow("run/mx7", out="run/mx7.pdf")
+    plt.pow("run/m6a", out="~/img/m6a.pdf")
+    plt.pow("run/m7a", out="~/img/m7a.pdf")
+
+    plt.pow("run/m6b", out="~/img/m6b.pdf")
+    plt.pow("run/m7b", out="~/img/m7b.pdf")
+
+    plt.pow("run/m1a", out="~/img/m1a.pdf")
+    plt.pow("run/m2a", out="~/img/m2a.pdf")
+    plt.pow("run/m2b", out="~/img/m2b.pdf")
+    plt.pow("run/m2c", out="~/img/m2c.pdf")
 }

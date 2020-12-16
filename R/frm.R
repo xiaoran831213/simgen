@@ -87,5 +87,10 @@ frm_mtx <- function(f, ...)
         return(NULL)
     x <- model.matrix(update.formula(f, ~ . - 1), ...)
     attr(x, "assign") <- NULL
+    
+    if(is.logical(x))
+    {
+        x <- x + 0
+    }
     x
 }

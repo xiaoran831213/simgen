@@ -60,7 +60,7 @@ nsp <- function(C, D=NULL, tol.egv=NULL, ...)
 
     C <- eigen(C, TRUE)
     D <- eigen(D, TRUE)
-
+    
     d1 <- D$values
     d2 <- C$values
     i1 <- d1 > max(d1) * tol.egv
@@ -103,7 +103,7 @@ nsp <- function(C, D=NULL, tol.egv=NULL, ...)
 #' @param tol.cor tolerance threshold for the largest correlation absolute value.
 #' @param tol.egv tolerance threshold for the smallest eigenvalue.
 #' @param ... additional parameters.
-mdt <- function(Z, C, D=NULL, tol.cor=NULL, tol.egv=NULL, ...)
+mdt <- function(Z, C, D=NULL, tol.cor=NULL, tol.egv=NULL, use.egv=0, ...)
 {
     if(is.null(tol.cor))
         tol.cor <- sqrt(.Machine$double.eps)
@@ -119,10 +119,11 @@ mdt <- function(Z, C, D=NULL, tol.cor=NULL, tol.egv=NULL, ...)
     ret <- nsp(C, D, tol.egv=tol.egv, ...)
     H <- ret$H
     L <- ret$L
-    dim(Z) <- NULL
-    X <- H %*% Z
+    
+    X <- H %*% c(Z)
 
-    P <- 1 - pchisq(sum(X^2), L)
+    ## P <- 1 - pchisq(sum(X^2), L)
+    P <- 1 - pchisq(sum(X^2), length(Z))
     c(list(X=X, P=P), ret, M=M)
 }
 

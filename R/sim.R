@@ -1,3 +1,115 @@
+#' calculate minor allele frequency
+#'
+#' @param g genotype matrix, N row samples and M column variants
+#' @return MAF of M variants
+maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
+
+fac <- function(g)
+{
+    g <- cbind(g == 1, g == 2)
+    m <- apply(g, 2, any)
+    if(!all(m))
+        g <- g[, m]
+    g + 0
+}
+
+#' Cached Real Genotype
+#' 
+#' A segment taken from from 1000 genome project.
+#'
+#' Specifically, this  is a continuous  segment from chromosome 17  region q12,
+#' with no missed call and an MAF is no less than 0.05.
+#'
+#' @name c17q12
+#' @noRd
+if(!exists("c17"))
+{
+    c17 <- readRDS(system.file("extdata", '17q12.rds', package="simgen"))
+    n17 <- nrow(c17)
+    m17 <- ncol(c17)
+    f17 <- maf(c17)
+}
+
+
+#' retain non-colinear variables
+ncv <- function(ldm, lcr=0, ucr=1, ...)
+{
+    r <- abs(ldm)
+    r[upper.tri(r, TRUE)] <- lcr + (ucr - lcr) / 2
+    b <- which(lcr <= r & r <= ucr, arr.ind=TRUE)
+    apply(r, 2, function(.) all(lcr <= . & . <= ucr))
+}
+
+#' set random element to missing
+#'
+#' @param x true data
+#' @param f frequency of missing
+#' @param nan the NaN to use (def=NA).
+#' @return the incomplete observation of \code{x}
+set.nan <- function(x, f=.1, nan=NA)
+{
+    x[sample.int(length(x), length(x) * f)] <- nan
+    x
+}
+
+
+#' Get Genotype Matrix
+#'
+#' Randomly draw a segment from the 1000 Genome Project.
+#'
+#' @param N number of samples
+#' @param L number of SNPs
+#' @param psd positive definite threshold
+#' @param ucr upper correlation between SNPs
+get_gmx <- function(N, L, psd=NULL, ucr=NULL, MAF=0.05, ...)
+{
+    psd <- psd %||% sqrt(.Machine$double.eps)
+    maf <- maf %||% 0.05
+    ucr <- ucr %||% 0.99
+
+    ## L variants on demand, reserve 2 * L
+    P <- min(L * 4, m17)
+    while(TRUE)
+    {
+        i <- sample.int(n17, N, N > n17)            # N
+        j <- seq(sample(m17 - P, 1) + 1, l=P)       # P
+        gmx <- c17[i, j]                            # N x P
+        gmx <- gmx[, maf(gmx) >= MAF]               # MAF
+        if(NCOL(gmx) < L)
+        {
+            P <- min(P + L - NCOL(gmx), m17)
+            cat("P = ", P, "\n", sep="")
+            next
+        }
+        ldm <- cor(gmx)                             # P x P
+        
+        ## drop  SNP  to  enforce  non-linearity;  if there  are  less  than  L
+        ## remaining, try again with a bigger reserve.
+        gmx <- gmx[, ncv(ldm, ucr=ucr, ...), drop=FALSE]
+        if(NCOL(gmx) < L)
+        {
+            P <- min(P + L - NCOL(gmx), m17)
+            cat("P = ", P, "\n", sep="")
+            next
+        }
+
+        ## select L variants now
+        j <- seq(sample(ncol(gmx) - L, 1) + 1, l=L)
+        gmx <- gmx[, j, drop=FALSE]
+        ldm <- cor(gmx)
+
+        ## if min(eigenvalue) < (threshold) * max(eigenvalue), try again
+        egv <- eigen(ldm, TRUE, TRUE)$values
+        if (egv[L] < psd * egv[1L])
+        {
+            cat("Non-PSD!\n")
+            next
+        }
+        break
+    }
+    gmx
+}
+
 #' Simulate variance covariance structure 
 #'
 #' @examples
@@ -56,9 +168,9 @@ pa0 <- function(size=1, ...)
 }
 
 ## parameters for the right hand, 1st moment
-pa1 <- function(size=1, type=c("numeric", "integer", "genotype"), ...)
+pa1 <- function(size=1, type=c("numeric", "genotype", "kgb"), ...)
 {
-    dict <- c(numeric=1, genotype=2)
+    dict <- c(numeric=1, genotype=2, kgb=3)
     if(is.character(type))
         type <- match.arg(type)
     list(size=size, type=type, ...)
@@ -309,7 +421,9 @@ sim_rsp <- function(model, data=NULL, ...)
 as.genotype <- function(x, m=NULL, ...)
 {
     if (is.null(m))
-        m <- runif(ncol(x), 0.05, 0.45)
+    {
+        m <- f17[sample(m17 - ncol(x), 1) + seq(ncol(x))]
+    }
     for(j in seq(ncol(x)))
     {
         m2 <- m[j] * m[j]           # HWE freq of 0 allele
@@ -318,6 +432,13 @@ as.genotype <- function(x, m=NULL, ...)
         x[, j] <- 2 - (x[, j] > qt[1]) - (x[, j] > qt[2])
     }
     x
+}
+
+as.kgb <- function(x, ...)
+{
+    ld <- cor(x)
+    ut <- ld[upper.tri(ld)]
+    get_gmx(nrow(x), ncol(x), ...)
 }
 
 #' Make the right side

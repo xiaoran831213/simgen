@@ -1,62 +1,67 @@
 #' Temporary Test
 #'
 #' @param N  # of samples
-#' @param L  # of variants
-#' @param P  # of casual variants
-#' @param M  # of covariates
-#' @param nsd SD of noise
-tst2 <- function(N=2e2, es1=0, es2=0, eps=1, ydm=2, ydt=1,
-                 cdt=5, evt=1e-4,
-                 seed=NULL, times=3e3, ...)
+tst2 <- function(N=5e2, M=2, a=0, b=1, d=0, e=1, times=1e3, ...)
 {
-    arg <- get.arg(skp=c("seed", "out", "times"))
-    psd <- arg$psd %||% evt
-    set.seed(seed)
-
+    arg <- get.arg(skp=c("seed", "times"))
+    evt <- arg$evt %||% 1e-8
+    psd <- arg$psd %||% evt / 10
+    set.seed(arg$seed)
+    rhm <- ~G(5) + X(5) + U(9) | LD(G, a=6, b=1) + CX(X, a=1, b=1) + CU(U, a=1, b=1) +
+        .5 @ GX(G+X, a=1, b=1) + .2 @ GU(G+U, a=1, b=1)
+    lhm <- Y(M) ~ a @ G + b @ X + d @ U:G
     rpt <- list()
     for(ii in seq(times))
     {
-        ## G: SNPs in high LD
-        flood(sim_dsg(~G(5) | LD(G, a=3, b=1), psd=psd, N=N)$dat)
-        G <- std(G)
-        ## Y: correlated traits
-        flood(sim_dsg(~Y(ydm) | CY(Y, a=1, b=1), psd=psd, N=N)$dat)
+        flood(sim_dsg(rhm, N, psd=psd)$dat)
+        G <- as.genotype(G)
+        flood(sim_rsp(lhm)$dat)
+        Y <- Y + matrix(rnorm(N * M), N, M) * e # outcomes
+        ## G <- fac(G)
+        G <- ORQ(G)
+        R <- lm(Y ~ X + G)$resid                # residual
         Y <- std(Y)
-        ## C: G and Y collide in covariates 
-        C <- sim_rsp(C(cdt) ~ es1 @ G + es2 @ Y)
-        C <- std(C) + matrix(rnorm(N * ncol(C)), N, ncol(C)) * eps
+        LHS <- list(
+            `LHS = Y`         = Y,
+            `LHS = BCX(Y^2)`  = BCX(.p(Y, 2:2, 1:1)),
+            `LHS = ORQ(Y:Y)`  = ORQ(.p(Y, 2:2, 2:2)),
+            `LHS = Y^2`       = .p(Y, 2:2, 1:1),
+            `LHS = Y:Y`       = .p(Y, 2:2, 2:2),
+            `LHS = R^2 + R:R` = .p(R, 2:2, 1:2))
+        MDL <- list(
+            `LHS - X     ~ {G}` = lhs - X     ~ {G},
+            `LHS - X - Y ~ {G}` = lhs - X - Y ~ {G})
+        PLD <- lapply(MDL, gwa_pld)
+        CFG <- rbind(
+            .e(lhs=names(LHS), mdl=names(MDL)[1:1]))
 
-        ## residual of Y ~ C
-        Z <- as.matrix(resid(lm(Y ~ C)))
-        if(ydt==1)
-            Z <- Z %*% nsp(cor(Z), NULL)$H
-        if(ydt==2)
-            Z <- pcs(Z)
-        ## residual of G ~ C
-        J <- as.matrix(resid(lm(G ~ C)))
-        
-        ## GWAS between nY and nX
-        t0 <- gwa_lm(Y ~     {G}) # no covariate
-        t1 <- gwa_lm(Y ~ C + {G}) # original t tests
-        t2 <- gwa_lm(Z ~     {G}) # residual t tests
-        t3 <- gwa_lm(Z ~     {J}) # double residual
-
-        ## test statistics
         r <- list()
-        r[['DT0']] <- mdt(t0$zsc, cor(G), cor(Y), tol.egv=evt) # controlled
-        r[['DT1']] <- mdt(t1$zsc, cor(J), cor(Y), tol.egv=evt) # 
-        r[['DT2']] <- mdt(t2$zsc, cov(J), cor(Z), tol.egv=evt) # 
-        r[['DT3']] <- mdt(t3$zsc, cor(J), cor(Z), tol.egv=evt) # 
-
-        p <- sapply(r, `[[`, 'P')
-        l <- sapply(r, `[[`, 'L')
-        rpt[[ii]] <- .d(itr=ii, mtd=names(r), pvl=p, egv=l)
+        for(j in seq(nrow(CFG)))
+        {
+            cfg <- CFG[j, ]
+            lhs <- LHS[[cfg$lhs]] # left hand side
+            mdl <- MDL[[cfg$mdl]] # model
+            pld <- PLD[[cfg$mdl]] # partial LD
+            aso <- gwa_lm(mdl)    # association analysis
+            lhc <- cor(aso$rsp)   # response correlation
+            . <- mdt(aso$zsc, pld, lhc, tol.egv=evt)
+            r <- r %c% .d(cfg, mtd="DOT", pvl=.$P, egv=.$L)
+            . <- mtq(aso$zsc, pld, lhc, tol.egv=evt)
+            r <- r %c% .d(cfg, mtd="TQT", pvl=.$P, egv=.$L)
+        }
+        mcr <- mean(abs(cor(G, X))) + mean(abs(cor(G, U)))
+        rpt[[ii]] <- cbind(itr=ii, do.call(rbind, r), mcr=mcr)
         if(!(ii %% 10))
             cat(".", ii, ".", sep=""); if(!(ii %% 100)) cat("\r")
     }
     set.seed(NULL)
-
     rpt <- cbind(arg, do.call(rbind, rpt))
-    rownames(rpt) <- NULL
+    
+    rpt <- within(rpt,
+    {
+        lhs <- factor(lhs, names(LHS))      # residuals
+        mdl <- factor(mdl, names(MDL))      # left hand side
+        mtd <- factor(mtd, c("DOT", "TQT")) # which test
+    })
     pow(rpt)
 }
