@@ -1,42 +1,36 @@
-#' Temporary Test
-#'
-#' @param N  # of samples
-tst6 <- function(N=5e2, M=2, a=0, b=1, d=0, e=1, evt=1e-4, times=1e3, ...)
+tst6 <- function(N=5e2, M=2, a=0, b=1, d=0, e=1, times=1e3, ...)
 {
     arg <- get.arg(skp=c("seed", "times"))
-    psd <- arg$psd %||% evt
+    evt <- arg$evt %||% 1e-8
+    psd <- arg$psd %||% evt / 10
     set.seed(arg$seed)
-    rhm <- ~G(5) + X(5) + U(9) | LD(G, a=5, b=1) + CX(X, a=1, b=1) +
-        CU(U, a=1, b=1)
-    ## + 0.5 @ GX(G+X, a=1, b=1) + 0.1 @ GU(G+U, a=a, b=1)
+    rhm <- ~G(5) + X(5) + U(9) | LD(G, a=6, b=1) + CX(X, a=1, b=1) + CU(U, a=1, b=1) +
+        .5 @ GX(G+X, a=1, b=1) + .2 @ GU(G+U, a=1, b=1)
     lhm <- Y(M) ~ a @ G + b @ X + d @ U:G
     rpt <- list()
     for(ii in seq(times))
     {
         flood(sim_dsg(rhm, N, psd=psd)$dat)
-        X <- X + G %*% matrix(rnorm(ncol(G) * ncol(X)), ncol(G), ncol(X)) * .2
-        U <- U + G %*% matrix(rnorm(ncol(G) * ncol(U)), ncol(G), ncol(U)) * .1
+        G <- fac(as.genotype(G))
         flood(sim_rsp(lhm)$dat)
-        
-        Y <- Y + matrix(rnorm(N * M), N, M) * e
+        Y <- Y + matrix(rnorm(N * M), N, M) * e # outcomes
+        Z <- lm(Y ~ X)$resid
+        R <- lm(Y ~ X + G)$resid                # residual
+        Y <- std(Y)
         LHS <- list(
-            `LHS = Y`               = Y,
-            ## `LHS = Y + Y^2`         = .p(Y, 1:2, 1),
-            ## `LHS = Y + Y:Y`         = cbind(Y, .p(Y, 2, 2)),
-            `LHS = Y + Y^2 + Y:Y`   = .p(Y, 1:2, 1:2),
-            ## `LHS = Y^2`             = .p(Y, 2, 1),
-            ## `LHS = Y:Y`             = .p(Y, 2, 2))
-            `LHS = Y^2 + Y:Y`       = .p(Y, 2:2, 1:2))
+            `LHS = Y`         = Y,
+            `LHS = BCX(Z^2)`  = BCX(.p(Z, 2:2, 1:1)),
+            `LHS = ORQ(Z:Z)`  = ORQ(.p(Z, 2:2, 2:2)),
+            `LHS = Z^2`       = .p(Z, 2:2, 1:1),
+            `LHS = Z:Z`       = .p(Z, 2:2, 2:2),
+            `LHS = R^2 + R:R` = .p(R, 2:2, 1:2))
         MDL <- list(
-            ## `LHS ~ X   +   {G}` = lhs ~ X   +   {G},
-            `LHS - X     ~ {G}` = lhs - X   ~   {G},
-            ## `LSH ~ X + Y + {G}` = lhs ~ X + Y + {G},
+            `LHS - X     ~ {G}` = lhs - X     ~ {G},
             `LHS - X - Y ~ {G}` = lhs - X - Y ~ {G})
         PLD <- lapply(MDL, gwa_pld)
+        CFG <- rbind(
+            .e(lhs=names(LHS), mdl=names(MDL)[1:1]))
 
-        .ex <- function(...) expand.grid(..., stringsAsFactors = FALSE)
-        CFG <- rbind(.ex(lhs=names(LHS)[1:2], mdl=names(MDL)[1:1]),
-                     .ex(lhs=names(LHS)[3:3], mdl=names(MDL)[2:2]))
         r <- list()
         for(j in seq(nrow(CFG)))
         {

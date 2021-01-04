@@ -1,5 +1,4 @@
-frm_fct <- function(f) attr(terms(f), "factors")
-
+## left hand side
 frm_lhs <- function(f, ret=0)
 {
     e <- environment(f)
@@ -13,6 +12,7 @@ frm_lhs <- function(f, ret=0)
     f
 }
 
+## right hand side
 frm_rhs <- function(f, ret=0)
 {
     e <- environment(f)
@@ -23,6 +23,7 @@ frm_rhs <- function(f, ret=0)
     f
 }
 
+## left bar side
 frm_lbs <- function(f, ret=0)
 {
     e <- environment(f)
@@ -34,6 +35,7 @@ frm_lbs <- function(f, ret=0)
     f
 }
 
+## right bar side
 frm_rbs <- function(f, ret=0)
 {
     e <- environment(f)
@@ -49,38 +51,19 @@ frm_rbs <- function(f, ret=0)
     f
 }
 
-frm_bar <- function(rhs, ...)
-{
-    e <- environment(rhs)
-    f <- frm_rhs(rhs, 1)
-    f <- strsplit(f, "[|]")[[1]]
-    f <- paste("~", f)
-    f <- sapply(f, as.formula, env = e)
-    unname(f)
-}
-
+## no intercept?
 frm_is0 <- function(f, ...)
 {
     attr(terms(f), "intercept") == 0 && length(all.vars(f)) == 0
 }
 
+## has intercept1?
 frm_is1 <- function(f, ...)
 {
     attr(terms(f), "intercept") == 1 && length(all.vars(f)) == 0
 }
 
-frm_cat <-function(..l, ..r, ..o="~")
-{
-    ..f <- paste(as.character(..l)[-1], ..o, as.character(..r)[-1])
-    if(..o != "~")
-        ..f <- paste("~", ..f)
-
-    flood(environment(..l))
-    flood(environment(..r))
-
-    as.formula(..f)
-}
-
+## get matrix
 frm_mtx <- function(f, ...)
 {
     if(is.null(f))
@@ -89,8 +72,6 @@ frm_mtx <- function(f, ...)
     attr(x, "assign") <- NULL
     
     if(is.logical(x))
-    {
         x <- x + 0
-    }
     x
 }

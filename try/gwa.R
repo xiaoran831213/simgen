@@ -1,3 +1,20 @@
+#' dosage genotype to factors
+#'
+#' Recode `aa = 0` to `(1, 0)`, `Aa = 1` to `(1, 1)`, and `AA=2` to `(0, 1)`.
+#' @param g matrix of genotype.
+#' @return factorized genotype.
+fac <- function(g)
+{
+    g <- cbind(g < 2, g > 0)
+    m <- apply(g, 2, any)
+    if(!all(m))
+        g <- g[, m]
+    g <- g + 0
+    g <- g[ , apply(g, 2, sd) > 0]
+    g
+}
+
+
 gwa_frm <- function(model, ...)
 {
     ## separate left and right side
@@ -39,6 +56,21 @@ gwa_frm <- function(model, ...)
     list(lh=lh, rh=rh, gt=gt, rr=rr)
 }
 
+#' Get regression residual
+#'
+#' @param Y matrix of responses
+#' @param ... covariates
+get_rsd <- function(Y, ..., int=TRUE)
+{
+    if(int)
+        X <- cbind(rep(1, NROW(Y)), ...)
+    else
+        X <- cbind(...)
+    if(is.null(X))
+        Y
+    else
+        qr.resid(qr(X), Y)
+}
 
 #' GWAS Linear Model
 #' @examples
@@ -77,16 +109,15 @@ gwa_lm <- function(model, ...)
     gmx <- frm_mtx(gt, ...) # genotype
     cvr <- frm_mtx(rh, ...) # covariate
     rsr <- frm_mtx(rr)      # residual regression
-    if(is.null(rr))
-    {
-        ## rsp <- resid(lm(rsp ~ 1))
-    }
-    else
-        rsp <- resid(lm(rsp ~ rsr))
-    rsp <- as.matrix(rsp)
+
+    ## residuals
+    cvr <- cbind(rep(1, nrow(gmx)), cvr)
+    qrd <- qr(cvr)
+    rsp <- qr.resid(qrd, rsp) # residual response (traits)
+    gmx <- qr.resid(qrd, gmx) # residual genotype
 
     ## model                                                                    
-    mdl <- if(is.null(cvr)) y ~ g else y ~ g + cvr
+    mdl <- y ~ g - 1
 
     ## z-scores                                                                 
     nms <- list(colnames(gmx), colnames(rsp))
@@ -99,8 +130,8 @@ gwa_lm <- function(model, ...)
             g <- gmx[, i]
             y <- rsp[, j]
             m <- lm(mdl)
-            zsc[i, j] <- summary(m)$coef[2, 3]
-            pvl[i, j] <- summary(m)$coef[2, 4]
+            zsc[i, j] <- summary(m)$coef[1, 3]
+            pvl[i, j] <- summary(m)$coef[1, 4]
         }
     }
     list(rsp=rsp, rsr=rsr, cvr=cvr, gmx=gmx, zsc=zsc, pvl=pvl)

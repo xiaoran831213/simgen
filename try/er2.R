@@ -10,7 +10,7 @@ er2 <- function(N=5e2, M=2, a=0, times=1e3, ...)
     rpt <- list()
     for(ii in seq(times))
     {
-        G <- get_gmx(N, 4, 1e-8, .99)   # get real genotype
+        G <- kgp(N, 4, 1e-8, .99)   # get real genotype
         F <- fac(G)                     # factorized
         Y <- matrix(rnorm(N * M), N, M) # outcomes
         Y2 <- Y^2

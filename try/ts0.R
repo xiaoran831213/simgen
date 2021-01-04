@@ -1,45 +1,50 @@
-#' Temporary Test
-#'
-#' @param N  # of samples
-#' @param M  # of traits
-#' @param nsd SD of noise
-tst0 <- function(N=2e2, M=2, a=0, e=1, evt=1e-4, seed=NULL, times=1e3, ...)
+tst0 <- function(N=5e2, M=2, L=4, a=0, b=1, d=0, e=1, times=1e3, ...)
 {
-    arg <- get.arg(skp=c("seed", "out", "times"))
-    psd <- arg$psd %||% evt
-    set.seed(seed)
-
+    arg <- get.arg(skp=c("seed", "times"))
+    evt <- arg$evt %||% 1e-8
+    psd <- arg$psd %||% evt / 10
+    set.seed(arg$seed)
+    rhm <- ~G(L) + X(L) + U(2 * L) | LD(G, a=1, b=1) + CX(X, a=1, b=1) + CU(U, a=1, b=1)
+    lhm <- Y(M) ~ a @ G + b @ X + d @ U:G
     rpt <- list()
-    nG <- 5
-    nU <- 0
-    rhs <- ~G(nG + nU) | HL(G, a=1, b=1)
     for(ii in seq(times))
     {
-        flood(sim_dsg(rhs, N, psd=psd)$dat)
-        U <- G[, -seq(nG)] # unobserved
-        G <- G[, +seq(nG)]  # SNPs
-        flood(sim_rsp(Y(M) ~ a @ G)$dat)
-        Y <- Y + matrix(rnorm(N * M, 0, e), N, M)
-        ## GWAS
+        flood(sim_dsg(rhm, N, psd=psd)$dat)
+        flood(sim_rsp(lhm)$dat)
+        Y <- Y + matrix(rnorm(N * M), N, M) * e # outcomes
         Y <- std(Y)
-        t0 <- gwa_lm(Y ~ {G}) # no covariate
-        ## test statistics
+        LHS <- list(`LHS = Y`             = Y)
+        MDL <- list(`LHS ~ {G} + X` = lhs ~ {G} + X)
+        PLD <- lapply(MDL, gwa_pld)
+        CFG <- .e(lhs=names(LHS), mdl=names(MDL))
         r <- list()
-        r[['D0a']] <- mdt(t0$zsc, cor(G), cor(Y), tol.egv=evt) #
-        r[['T0a']] <- mtq(t0$zsc, cor(G), cor(Y), tol.egv=evt) # controlled
-
-        p <- sapply(r, `[[`, 'P')
-        l <- sapply(r, `[[`, 'L')
-
-        mcr <- mean(abs(cor(G, U)))
-        rpt[[ii]] <- .d(itr=ii, mtd=names(r), pvl=p, egv=l, mcr=mcr)
-        if(!(ii %% 10))
+        for(j in seq(nrow(CFG)))
         {
-            cat(".", ii, ".", sep=""); if(!(ii %% 100)) cat("\r")
+            cfg <- CFG[j, ]
+            lhs <- LHS[[cfg$lhs]] # left hand side
+            mdl <- MDL[[cfg$mdl]] # model
+            ## pld <- PLD[[cfg$mdl]] # partial LD
+            aso <- gwa_lm(mdl)    # association analysis
+            lhc <- cor(aso$rsp)   # response correlation, adjusted
+            pld <- cor(aso$gmx)
+            . <- mdt(aso$zsc, pld, lhc, tol.egv=evt)
+            r <- r %c% .d(cfg, mtd="DOT", pvl=.$P, egv=.$L)
+            ## . <- mtq(aso$zsc, pld, lhc, tol.egv=evt)
+            ## r <- r %c% .d(cfg, mtd="TQT", pvl=.$P, egv=.$L)
         }
+        mcr <- mean(abs(cor(G, X))) + mean(abs(cor(G, U)))
+        rpt[[ii]] <- cbind(itr=ii, do.call(rbind, r), mcr=mcr)
+        if(!(ii %% 10))
+            cat(".", ii, ".", sep=""); if(!(ii %% 100)) cat("\r")
     }
     set.seed(NULL)
-
     rpt <- cbind(arg, do.call(rbind, rpt))
+    
+    rpt <- within(rpt,
+    {
+        lhs <- factor(lhs, names(LHS))      # residuals
+        mdl <- factor(mdl, names(MDL))      # left hand side
+        mtd <- factor(mtd, c("DOT", "TQT")) # which test
+    })
     pow(rpt)
 }

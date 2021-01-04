@@ -1,30 +1,31 @@
-tst4 <- function(N=5e2, M=2, a=0, b=0, d=0, e=1, times=1e3, ...)
+tst4 <- function(N=5e2, M=2, L=4, a=0, b=0, d=0, e=1, times=1e3, ...)
 {
     arg <- get.arg(skp=c("seed", "times"))
     evt <- arg$evt %||% 1e-8
     psd <- arg$psd %||% evt / 10
     set.seed(arg$seed)
-    rhm <- ~G(5) + X(5) + U(9) | LD(G, a=6, b=1) + CX(X, a=1, b=1) + CU(U, a=1, b=1)
+    rhm <- ~G(L) + X(L) + U(L) | LD(G, a=1, b=1) + CX(X, a=1, b=1) + CU(U, a=1, b=1)
     lhm <- Y(M) ~ a @ G + b @ X + d @ U:G
     rpt <- list()
     for(ii in seq(times))
     {
         flood(sim_dsg(rhm, N, psd=psd)$dat)
+        mcr <- mean(abs(cor(G, X))) + mean(abs(cor(G, U)))
         G <- as.genotype(G)
+
+
         flood(sim_rsp(lhm)$dat)
         Y <- Y + matrix(rnorm(N * M), N, M) * e # outcomes
-        G <- fac(G)
-        ## G <- ORQ(G)
-        R <- lm(Y ~ X + G)$resid                # residual
+        G <- ORQ(fac(G))                        # as factor, normalized
+        R <- get_rsd(Y, X, G)                   # residual
         Y <- std(Y)                             # centered
         LHS <- list(
-            `LHS = ORQ(Y:Y)` = ORQ(.p(Y, 2, 2)),
-            `LHS = BCX(Y^2)` = BCX(.p(Y, 2, 1)),
-            `LHS = Y:Y`      = .p(Y, 2, 2),
-            `LHS = Y^2`      = .p(Y, 2, 1))
-        MDL <- list(
-            `LHS ~ {G}` = lhs ~ {G})
-        PLD <- lapply(MDL, gwa_pld)
+            `LHS = BCX(Y^2)`  = BCX(.p(Y, 2:2, 1:1)),
+            `LHS = ORQ(Y:Y)`  = ORQ(.p(Y, 2:2, 2:2)),
+            `LHS = Y:Y`       = .p(Y, 2:2, 2:2),
+            `LHS = Y^2`       = .p(Y, 2:2, 1:1),
+            `LHS = R^2 + R:R` = .p(R, 2:2, 1:2))
+        MDL <- list(`LHS ~ {G} + X` = lhs ~ {G} + X)
         
         CFG <- .e(lhs=names(LHS), mdl=names(MDL))
         r <- list()
@@ -33,15 +34,14 @@ tst4 <- function(N=5e2, M=2, a=0, b=0, d=0, e=1, times=1e3, ...)
             cfg <- CFG[j, ]
             lhs <- LHS[[cfg$lhs]] # left hand side
             mdl <- MDL[[cfg$mdl]] # model
-            pld <- PLD[[cfg$mdl]] # partial LD
             aso <- gwa_lm(mdl)    # association analysis
             lhc <- cor(aso$rsp)   # response correlation
+            pld <- cor(aso$gmx)
             . <- mdt(aso$zsc, pld, lhc, tol.egv=evt)
             r <- r %c% .d(cfg, mtd="DOT", pvl=.$P, egv=.$L)
             . <- mtq(aso$zsc, pld, lhc, tol.egv=evt)
             r <- r %c% .d(cfg, mtd="TQT", pvl=.$P, egv=.$L)
         }
-        mcr <- mean(abs(cor(G, X))) + mean(abs(cor(G, U)))
         rpt[[ii]] <- cbind(itr=ii, do.call(rbind, r), mcr=mcr)
         if(!(ii %% 10))
             cat(".", ii, ".", sep=""); if(!(ii %% 100)) cat("\r")

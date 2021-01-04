@@ -1,5 +1,9 @@
+#' null or else operator
 `%||%` <- function(x, v) if(is.null(x) || length(x)==0) v else x
+
+#' concatenation operator
 `%c%` <- function(x, v) {x[[length(x) + 1]] <- v; x}
+
 #' Create data frame
 #'
 #' A wrapper  for R \code{data.frame},  which ensures that string  variables not
@@ -10,6 +14,7 @@
 #' Expand Grid
 #'
 #' A wrapper for R \code{expand.grid}
+#' @noRd
 .e <- function(...) expand.grid(..., stringsAsFactors = FALSE)
 
 
@@ -77,14 +82,4 @@ get.arg <- function(skp=NULL)
 
     ## return
     do.call(data.frame, c(a, list(stringsAsFactors=FALSE)))
-}
-
-#' Flatten a matrix or array to a vector
-#'
-#' @param x a matrix or array
-#' @return vectorized `x`
-flatten <- function(x)
-{
-    dim(x) <- NULL
-    x
 }

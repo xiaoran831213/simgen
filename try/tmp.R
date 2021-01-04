@@ -54,7 +54,7 @@ tmp1 <- function()
         ## G <- mvn(N, 0, sim_cor(L, 1, 1, tol.psd=1e-9))
         Y <- std(matrix(rnorm(N * 2), N, 2))
 
-        G <- get_gmx(N, L, psd=1e-8, ucr=.99, maf=.05)
+        G <- kgp(N, L, psd=1e-8, ucr=.99, maf=.05)
         G <- fac(G)
         ## G <- matrix(rnorm(N * L), N, L)
         ## LHS <- cbind(Y^2, Y[, 1] * Y[, 2])
@@ -75,4 +75,25 @@ tmp1 <- function()
     }
     pvl <- unlist(pvl)
     mean(pvl < 0.05)
+}
+
+library(microbenchmark)
+tmp2 <- function(N=5e2, M=3, a=0, b=1, e=2)
+{
+    rhm <- ~G(5) + X(5) | LD(G, a=6, b=1) + CX(X, a=1, b=1) + .5 @ GX(G+X, a=1, b=1)
+    lhm <- Y(M) ~ a @ G + b @ X 
+    flood(sim_dsg(rhm, N)$dat)
+    flood(sim_rsp(lhm)$dat)
+    Y <- Y + matrix(rnorm(N * M), N, M) * e # outcomes
+    Y <- std(Y, TRUE, FALSE)
+    X <- std(X, TRUE, FALSE)
+    G <- std(G, TRUE, FALSE)
+    Z <- get_rsd(Y, X, int=FALSE)
+    H <- get_rsd(G, X, int=FALSE)
+    m1 <- lm(Y ~ G + X)
+    m2 <- lm(Z ~ H)
+
+    s1 <- summary(m1)[[1]]$coef
+    s2 <- summary(m2)[[1]]$coef
+    list(s1, s2)
 }

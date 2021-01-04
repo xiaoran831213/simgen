@@ -41,3 +41,19 @@ ORQ <- function(X)
         X <- qnorm((rank(X) - .5) / length(X))
     std(X)
 }
+
+pow <- function(rpt)
+{
+    rpt <- subset(rpt, se=-itr)
+    grp <- subset(rpt, se=-c(pvl, egv, mcr))
+    rpt <- by(rpt, grp, function(g)
+    {
+        cfg <- subset(g, se=-c(pvl, egv))[1, ]
+        pow <- with(g, mean(pvl <= 0.05))
+        egv <- with(g, mean(egv))
+        mcr <- with(g, mean(mcr))
+        cbind(cfg, pow=pow, egv=egv, rep=nrow(g))
+    })
+    rpt <- do.call(rbind, rpt)
+    rpt
+}

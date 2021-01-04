@@ -122,8 +122,7 @@ mdt <- function(Z, C, D=NULL, tol.cor=NULL, tol.egv=NULL, use.egv=0, ...)
     
     X <- H %*% c(Z)
 
-    ## P <- 1 - pchisq(sum(X^2), L)
-    P <- 1 - pchisq(sum(X^2), length(Z))
+    P <- 1 - pchisq(sum(X^2), L)
     c(list(X=X, P=P), ret, M=M)
 }
 

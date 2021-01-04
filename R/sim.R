@@ -1,24 +1,31 @@
-#' calculate minor allele frequency
+#' minor allele frequencies
 #'
 #' @param g genotype matrix, N row samples and M column variants
 #' @return MAF of M variants
 maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
 
-fac <- function(g)
-{
-    g <- cbind(g == 1, g == 2)
-    m <- apply(g, 2, any)
-    if(!all(m))
-        g <- g[, m]
-    g + 0
-}
+#' allele sandard deviation
+#'
+#' @param g genotype matrix, N row samples and M column variants
+#' @return SD of M variants
+asd <- function(g) apply(g, 2, sd)
+
+#' get formula factors
+#'
+#' A convenience function equivalent to `attr(terms(f), "factors")`.
+#' 
+#' @param f the formula
+#' @return factors in the formula
+#' @noRd
+ffc <- function(f) attr(terms(f), "factors")
+
 
 #' Cached Real Genotype
 #' 
 #' A segment taken from from 1000 genome project.
 #'
-#' Specifically, this  is a continuous  segment from chromosome 17  region q12,
-#' with no missed call and an MAF is no less than 0.05.
+#' A continuous segment from chromosome 17  region q12, with no missed calls and
+#' minor allele frequency no less than 0.05.
 #'
 #' @name c17q12
 #' @noRd
@@ -32,6 +39,13 @@ if(!exists("c17"))
 
 
 #' retain non-colinear variables
+#'
+#' Trim a correlation  matrix so the correlation among  remaining variables are
+#' within specified thresholds.
+#' @param ldm LD correlation matrix
+#' @param lcr lower correlation threshold
+#' @param ucr upper correlation threshold
+#' @return index of variables to be retained.
 ncv <- function(ldm, lcr=0, ucr=1, ...)
 {
     r <- abs(ldm)
@@ -53,28 +67,30 @@ set.nan <- function(x, f=.1, nan=NA)
 }
 
 
-#' Get Genotype Matrix
+#' Genotype from 1000 Genome Project
 #'
 #' Randomly draw a segment from the 1000 Genome Project.
 #'
 #' @param N number of samples
 #' @param L number of SNPs
 #' @param psd positive definite threshold
-#' @param ucr upper correlation between SNPs
-get_gmx <- function(N, L, psd=NULL, ucr=NULL, MAF=0.05, ...)
+#' @param ucr upper correlation threshold
+kgp <- function(N, L, psd=NULL, ucr=NULL, MAF=0.05, MSD=NULL, ...)
 {
     psd <- psd %||% sqrt(.Machine$double.eps)
-    maf <- maf %||% 0.05
     ucr <- ucr %||% 0.99
+    MAF <- MAF %||% 0.05
+    MSD <- MSD %||% sqrt(2 * MAF * (1 - MAF)) * .8
 
     ## L variants on demand, reserve 2 * L
-    P <- min(L * 4, m17)
+    P <- min(L * 5, m17)
     while(TRUE)
     {
         i <- sample.int(n17, N, N > n17)            # N
         j <- seq(sample(m17 - P, 1) + 1, l=P)       # P
         gmx <- c17[i, j]                            # N x P
-        gmx <- gmx[, maf(gmx) >= MAF]               # MAF
+        gmx <- gmx[, maf(gmx) >= MAF]               # minimum minor allele freq
+        gmx <- gmx[, asd(gmx) >= MSD]               # minimum allele SD
         if(NCOL(gmx) < L)
         {
             P <- min(P + L - NCOL(gmx), m17)
@@ -110,34 +126,15 @@ get_gmx <- function(N, L, psd=NULL, ucr=NULL, MAF=0.05, ...)
     gmx
 }
 
+
 #' Simulate variance covariance structure 
 #'
 #' @examples
-#' rho <- cmx(500)
+#' rho <- sim_cor(8)
 #' print(rho[1:5, 1:5])
 #' summary(rho[lower.tri(rho)])
 #' 
 #' @noRd
-sim_vcs <- function(L, alpha=1, beta=alpha, ...)
-{
-    ## correlation
-    R <- matrix(0, L, L)
-
-    ## draw the lower triangle
-    R[lower.tri(R)] <- 2 * rbeta(L * (L - 1) / 2, alpha, beta) - 1
-    R <- R + t(R)
-    diag(R) <- 1
-    R <- nearPD(R, corr=TRUE, posd.tol = 1e-3)$mat
-
-    ## boost
-    ## u <- tcrossprod(2 * rbeta(L, log(L) * 2, log(L) * 2) - 1) * L
-    ## R <- cov2cor(R + u)
-
-    ## force PD
-    ## R <- fpd(R)
-    cov2cor(R)
-}
-
 sim_cor <- function(size, alpha=1, beta=alpha, tol.psd=NULL, ...)
 {
     tol.psd <- tol.psd %||% sqrt(.Machine$double.eps)
@@ -146,18 +143,8 @@ sim_cor <- function(size, alpha=1, beta=alpha, tol.psd=NULL, ...)
     r[lower.tri(r)] <- 2 * rbeta(size * (size - 1) / 2, alpha, beta) - 1
     ## make correlation
     r <- r + t(r)
-    diag(r) <- 1
-    ## enforce PD
-    r <- nearPD(r, corr=TRUE, ensureSymmetry=TRUE, posd.tol=tol.psd)$mat
-    as.matrix(r)
-    ## r <- fpd(r, tol.psd)
-}
-
-sim_dsg <- function(x, type, ...)
-{
-    dot <- list(...)
-    fun <- paste0("as.", type)
-    do.call(fun, c(x, dot))
+    ## enforce PD and diagonal
+    npd(r, 1, tol.psd=tol.psd)
 }
 
 
@@ -204,19 +191,19 @@ pa2 <- function(vars, type=c(diag=1, rand=2, ones=3), alpha=NULL, beta=NULL, ...
 #' Simulate design matrix
 #'
 #' @examples
-#' mu <- "A(2, 'g') + B(3, 'g') + C(2, 'n') + D(2, 'n')"
-#' sg <- "Ph(A, 'd') + 2 @ LD(B, a=8, b=1) + .5 @ CV(B + C, a=1, b=7) + .2 @ JS(D, 'o')"
+#' mu <- "X(2, 'n') + G(3, 'g')"
+#' sg <- "CX(X, 'r') + LD(G, a=8, b=1) + 0.1 @ XG(X+G, 'r')"
 #' fm <- as.formula(paste("~", mu, "|", sg))
 #' print(fm)
 #'
 #' res <- sim_dsg(fm, 1e3)
 #'
 #' ## data
-#' print(round(head(res$raw), 3))
-#' print(round(head(res$dsg), 3))
+#' print(round(head(res$raw), 3))  # raw data
+#' print(round(head(res$dsg), 3))  # transformed
 #' 
 #' ## correlation / LD
-#' print(res$vcs)       # model suggested
+#' print(res$vcs)       # suggested
 #' sapply(res$dat, cor) # empirical
 sim_dsg <- function(model, N=5e2, psd=NULL)
 {
@@ -242,10 +229,10 @@ sim_dsg <- function(model, N=5e2, psd=NULL)
 
     ## -------- treat the 2nd moment, mm2 --------
     ## extract coefficients
-    . <- colnames(frm_fct(mm2))
+    . <- colnames(ffc(mm2))
     co2 <- as.numeric(sub("@.*$", "", sub("^[^@]*$", "1", .)))
 
-    . <- rownames(frm_fct(mm2))
+    . <- rownames(ffc(mm2))
     rgx <- regexpr("[A-z][^(]*([(][^()]*[)])", .) # match
     tm2 <- regmatches(., rgx)                     # terms
     nm2 <- sub("[(].*[)]$", "", tm2)              # names
@@ -432,72 +419,4 @@ as.genotype <- function(x, m=NULL, ...)
         x[, j] <- 2 - (x[, j] > qt[1]) - (x[, j] > qt[2])
     }
     x
-}
-
-as.kgb <- function(x, ...)
-{
-    ld <- cor(x)
-    ut <- ld[upper.tri(ld)]
-    get_gmx(nrow(x), ncol(x), ...)
-}
-
-#' Make the right side
-#'
-#' @param N sample size
-#' @param L number of g-variants
-#' @param M number of covariates
-#' @param P number of g-variants that is effective
-#' @param e size of white noise
-#' @return
-#' a list,
-#' \itemize{
-#' }
-sim <- function(nrep, expr, N=1e3, L=3, M=2, P=1, nsd=1, ...)
-{
-    cfg <- get.arg(skp=c('nrep', 'expr', 'maf'))
-    bug <- cfg$bug %||% 0
-
-    ## default expression: summarize the outcome Y
-    if(missing(expr))
-    {
-        expr <- quote(
-        {
-            val <- summary(Y)
-            key <- names(val)
-            val <- round(as.vector(val), 3)
-            .d(mtd="sm5", key=key, val=val)
-        })
-    }
-
-    ## correlation of all variables
-    C <- cmx(L + M, ...)
-
-    res <- list()
-    for(i in seq(nrep))
-    {
-        ## L variants and M covariates
-        X <- mvn(N, 0, C)          
-
-        ## variants discretized
-        if(L > 0)
-            X[, 1:L] <- hwe(X[, 1:L], ...)
-
-        G <- X[, 0 + seq(1, l=L), drop=FALSE]
-        X <- X[, L + seq(1, l=M), drop=FALSE]
-        
-        ## Y = noise + genetics + environment
-        Y <- rnorm(N, 0, nsd) # noise
-        if(L > 0 && P > 0)         # genetics
-            Y <- Y + std(G[, sample(L, P), drop=FALSE] %*% rnorm(P))
-        if(M > 0) # enviornment
-            Y <- Y + std(X %*% rnorm(M))
-        Y <- drop(std(Y))
-
-        val <- eval(substitute(expr))
-        res[[i]] <- .d(itr=i, val)
-    }
-    res <- cbind(cfg, do.call(rbind, res))
-    
-    ## return
-    res
 }
