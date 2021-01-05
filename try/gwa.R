@@ -1,3 +1,39 @@
+#' Compute Polynomials
+#'
+#' @param x matrix of basic terms.
+#' @param d degrees to compute.
+#' @param t number of terms allowed.
+#' @param o use orthoganal transformation (def=FALSE).
+#' @return polynomial terms expanded from the given basic terms.
+.p <- function(x, d=NULL, t=NULL, o=FALSE)
+{
+    if(!is.matrix(x))
+        dim(x) <- c(length(x), 1L)
+    d <- d %||% 1
+    t <- t %||% seq.int(max(d))
+
+    ## get polynomial
+    x <- poly(x, degree=max(d), raw=!o, simple=TRUE)
+
+    ## select by degree
+    x <- x[, attr(x, 'degree') %in% d, drop=FALSE]
+
+    ## select by terms
+    . <- rowSums(do.call(rbind, strsplit(colnames(x), "[.]")) != "0")
+    x <- x[, . %in% t, drop=FALSE]
+
+    ## clean up
+    attr(x, 'class') <- NULL
+    attr(x, 'degree') <- NULL
+
+    x
+}
+
+pcs <- function(x) x %*% svd(x)$v
+
+rkn <- function(X)  scale(apply(X, 2, rank))
+
+
 #' dosage genotype to factors
 #'
 #' Recode `aa = 0` to `(1, 0)`, `Aa = 1` to `(1, 1)`, and `AA=2` to `(0, 1)`.
