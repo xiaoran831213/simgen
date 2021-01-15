@@ -1,43 +1,3 @@
-## nsp <- function(C, D=NULL, tol.egv=NULL, ...)
-## {
-##     tol.egv <- tol.egv %||%  sqrt(.Machine$double.eps)
-##     D <- D %||% 1
-
-##     C <- eigen(C, TRUE)
-##     D <- eigen(D, TRUE)
-
-##     d1 <- D$values
-##     d2 <- C$values
-##     i1 <- d1 > max(d1) * tol.egv
-##     i2 <- d2 > max(d2) * tol.egv
-##     d1 <- d1[i1]
-##     d2 <- d2[i2]
-##     u1 <- D$vectors[, i1]
-##     u2 <- C$vectors[, i2]
-##     d <- kronecker(d1, d2)
-##     u <- kronecker(u1, u2)
-    
-##     ## d <- kronecker(D$values, C$values)
-##     ## u <- kronecker(D$vectors, C$vectors)
-    
-##     ## positive eigen values
-##     ## . <- d > max(d) * tol.egv
-##     ## if(!all(.))
-##     ## {
-##     ##     d <- d[  .]
-##     ##     u <- u[, .]
-##     ## }
-##     L <- length(d)              # effective number of eigen
-    
-##     ## square root
-##     dim(d) <- NULL
-##     d <- sqrt(1/d)
-##     H <- u %*% (d * t(u))       # U diag(d) U'
-##     H <- 0.5 * (H + t(H))
-    
-##     list(H=H, L=L)
-## }
-
 tmp1 <- function()
 {
     times = 5e3
@@ -77,23 +37,87 @@ tmp1 <- function()
     mean(pvl < 0.05)
 }
 
-library(microbenchmark)
-tmp2 <- function(N=5e2, M=3, a=0, b=1, e=2)
+tmp2 <- function(a=0, b=1, e=1, N=1e2, times=5e2)
 {
-    rhm <- ~G(5) + X(5) | LD(G, a=6, b=1) + CX(X, a=1, b=1) + .5 @ GX(G+X, a=1, b=1)
-    lhm <- Y(M) ~ a @ G + b @ X 
-    flood(sim_dsg(rhm, N)$dat)
-    flood(sim_rsp(lhm)$dat)
-    Y <- Y + matrix(rnorm(N * M), N, M) * e # outcomes
-    Y <- std(Y, TRUE, FALSE)
-    X <- std(X, TRUE, FALSE)
-    G <- std(G, TRUE, FALSE)
-    Z <- get_rsd(Y, X, int=FALSE)
-    H <- get_rsd(G, X, int=FALSE)
-    m1 <- lm(Y ~ G + X)
-    m2 <- lm(Z ~ H)
+    pvl <- replicate(times,
+    {
+        x <- rnorm(N)
+        u <- rnorm(N)
 
-    s1 <- summary(m1)[[1]]$coef
-    s2 <- summary(m2)[[1]]$coef
-    list(s1, s2)
+        y1 <- rnorm(N, a * x + b * x * u) + e * rnorm(N)
+        ## y1 <- rnorm(N, a * x, exp(b * x)) + e * rnorm(N)
+        
+        m1 <- lm(y1 ~ x)
+        p1 <- summary(m1)$coef[2, 4]
+
+        y2 <- resid(m1)^2
+        m2 <- lm(y2 ~ x)
+        p2 <- summary(m2)$coef[2, 4]
+
+        c(p1=p1, p2=p2)
+    })
+
+    rowMeans(pvl < 0.05)
+}
+
+
+tmp3 <- function(a=0, b=1, e=1, times=5e2, N=1e2)
+{
+    ## w <- matrix(rnorm(N * N), N, N)
+    ## w <- t(svd(w)$u)
+    pvl <- replicate(times,
+    {
+        x <- rnorm(N)
+        u <- rnorm(N)
+
+        y1 <- rnorm(N, a * x + b * x * u) + e * rnorm(N)
+        y1 <- bin(y1)
+
+        m1 <- lm(y1 ~ x)
+        h1 <- predict(m1, type='res')
+        p1 <- summary(m1)$coef[2, 4]
+
+        y2 <- log(resid(m1)^2)
+        m2 <- lm(y2 ~ x)
+        p2 <- summary(m2)$coef[2, 4]
+
+        h2 <- h1 * (1 - h1)
+        m3 <- lm(y2 ~ h2)
+        p3 <- summary(m3)$coef[2, 4]
+        c(p1=p1, p2=p2, p3=p3)
+    })
+
+    rowMeans(pvl < 0.05)
+}
+
+tmp4 <- function(a=0, b=1, e=1, times=5e2, N=1e2)
+{
+    pvl <- replicate(times,
+    {
+        x <- rnorm(N)
+        u <- rnorm(N)
+
+        y1 <- rnorm(N, a * x, exp(b * x)) + e * rnorm(N)
+        
+        m1 <- lm(y1 ~ x)
+        p1 <- summary(m1)$coef[2, 4]
+        
+        y2 <- resid(m1)^2
+        m2 <- lm(y2 ~ x)
+        p2 <- summary(m2)$coef[2, 4]
+
+        m3 <- try(glm(y2 ~ x, Gamma("log")))
+        if(!inherits(m3, "try-error"))
+        {
+            p3 <- summary(m3)$coef[2, 4]
+        }
+        else
+        {
+            p3 <- NA
+        }
+
+        c(p1=p1, p2=p2, p3=p3)
+    })
+
+    rowMeans(pvl < 0.05, na.rm=TRUE)
 }

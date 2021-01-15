@@ -57,13 +57,12 @@ get.pow <- function(sim, cache=TRUE)
     else
     {
         rpt <- get.rpt(sim)
-        grp <- subset(rpt, se=-c(pow, egv, mcr))
+        grp <- subset(rpt, se=-c(pow, egv))
         pow <- by(rpt, grp, function(g)
         {
             cfg <- subset(g, se=-c(pow, egv, rep))[1, ]
             pow <- with(g, sum(pow * rep) / sum(rep))
             egv <- with(g, sum(egv * rep) / sum(rep))
-            mcr <- with(g, sum(mcr * rep) / sum(rep))
             rep <- with(g, sum(rep))
             cbind(cfg, pow=pow, egv=egv, rep=rep)
         })
@@ -85,19 +84,15 @@ get.cfg <- function(rpt)
     msg
 }
 
-plt.pow <- function(sim, sub, out=paste0(sim, '.pdf'), ttl=NULL)
+plt.pow <- function(sim, sub, out=paste0(sim, '.pdf'), ...)
 {
     rpt <- get.pow(sim)
-    if(!missing(sub))
-    {
-        sub <- substitute(sub)
-        sub <- eval(sub, rpt, parent.frame())
-        rpt <- rpt[sub, ]
-    }
-
+    dot <- list(...)
+    x <- if(is.null(dot$x)) "M"   else dot$x
+    y <- if(is.null(dot$y)) "pow" else dot$y
+    
     ## key valus
-    kdc <- c(hd0="H0: U=0, G+U", hd1="H1: U>0, G+U", hd2="H2: U=0, G*U", hd3="H3: U>0, G*U",
-             ha0="H0: U=0, G=0", ha1="H1: U>0, G=0", ha2="H2, U=0, G>0", ha3="H3: U>0, G>0")
+    kdc <- c(hd0="H0: G=0, U=0", hd1="H1: G=0, GxU", hd2="H2: G>0, U=0", hd3="H3: G>0, GxU")
     kna <- setdiff(unique(rpt$key), names(kdc))
     kdc[kna] <- kna
     rpt <- within(rpt,
@@ -106,12 +101,22 @@ plt.pow <- function(sim, sub, out=paste0(sim, '.pdf'), ttl=NULL)
         lhs <- base::sub("^LHS = ", "", lhs)
         tag <- mapply(base::sub, list("^LHS"), lhs, mdl)
     })
+
+    if(!missing(sub))
+    {
+        sub <- substitute(sub)
+        sub <- eval(sub, rpt, parent.frame())
+        rpt <- rpt[sub, ]
+    }
+    rpt$x <- rpt[, x]
+    rpt$y <- rpt[, y]
     
-    g <- ggplot(rpt, aes(x=M, y=pow))
+    ## key valus
+    g <- ggplot(rpt, aes(x=x, y=y))
     g <- g + geom_line(aes(color=mtd), alpha=.5, size=1)
     g <- g + facet_grid(key ~ tag)
-    g <- g + labs(title=ttl, subtitle=get.cfg(rpt))
-    g <- g + xlab("Number of Traits")
+    g <- g + labs(title=dot$ttl, subtitle=get.cfg(rpt))
+    g <- g + xlab(dot$xlab) # "Number of Traits")
     g <- g + ylab("Ratio of P < 0.05")
     g <- g + .th
 
@@ -130,14 +135,9 @@ plt.pow <- function(sim, sub, out=paste0(sim, '.pdf'), ttl=NULL)
 
 plt.main <- function()
 {
-    plt.pow("run/m6a", out="~/img/m6a.pdf")
-    plt.pow("run/m7a", out="~/img/m7a.pdf")
+    plt.pow("run/m22", x="M", xlab="# of traits")
+    plt.pow("run/m32", x="M", xlab="# of traits")
 
-    plt.pow("run/m6b", out="~/img/m6b.pdf")
-    plt.pow("run/m7b", out="~/img/m7b.pdf")
-
-    plt.pow("run/m1a", out="~/img/m1a.pdf")
-    plt.pow("run/m2a", out="~/img/m2a.pdf")
-    plt.pow("run/m2b", out="~/img/m2b.pdf")
-    plt.pow("run/m2c", out="~/img/m2c.pdf")
+    plt.pow("run/n22", x="N", xlab="sample size")
+    plt.pow("run/n32", x="N", xlab="sample size")
 }

@@ -73,24 +73,27 @@ set.nan <- function(x, f=.1, nan=NA)
 #'
 #' @param N number of samples
 #' @param L number of SNPs
-#' @param psd positive definite threshold
-#' @param ucr upper correlation threshold
-kgp <- function(N, L, psd=NULL, ucr=NULL, MAF=0.05, MSD=NULL, ...)
+#' @param kgp.con draw variants continousely (def=1)
+#' @param kgp.psd positive definite threshold
+#' @param kgp.ucr upper correlation threshold
+#' @param kgp.maf lower minor allele frequency threshold
+kgp <- function(N, L, kgp.con=1, kgp.psd=NULL, kgp.ucr=NULL, kgp.maf=NULL, ...)
 {
-    psd <- psd %||% sqrt(.Machine$double.eps)
-    ucr <- ucr %||% 0.99
-    MAF <- MAF %||% 0.05
-    MSD <- MSD %||% sqrt(2 * MAF * (1 - MAF)) * .8
+    psd <- kgp.psd %||% sqrt(.Machine$double.eps)
+    ucr <- kgp.ucr %||% 0.99
+    MAF <- kgp.maf %||% 0.05
 
     ## L variants on demand, reserve 2 * L
     P <- min(L * 5, m17)
     while(TRUE)
     {
-        i <- sample.int(n17, N, N > n17)            # N
-        j <- seq(sample(m17 - P, 1) + 1, l=P)       # P
-        gmx <- c17[i, j]                            # N x P
-        gmx <- gmx[, maf(gmx) >= MAF]               # minimum minor allele freq
-        gmx <- gmx[, asd(gmx) >= MSD]               # minimum allele SD
+        i <- sample.int(n17, N, N > n17)          # N
+        if(kgp.con)                               # P
+            j <- seq(sample(m17 - P, 1) + 1, l=P) #
+        else                                      #
+            j <- sort(sample(m17, P))             #
+        gmx <- c17[i, j, drop=FALSE]              # N x P
+        gmx <- gmx[, maf(gmx) >= MAF, drop=FALSE] # min MAF
         if(NCOL(gmx) < L)
         {
             P <- min(P + L - NCOL(gmx), m17)
@@ -115,7 +118,7 @@ kgp <- function(N, L, psd=NULL, ucr=NULL, MAF=0.05, MSD=NULL, ...)
         ldm <- cor(gmx)
 
         ## if min(eigenvalue) < (threshold) * max(eigenvalue), try again
-        egv <- eigen(ldm, TRUE, TRUE)$values
+        egv <- try(eigen(ldm, TRUE, TRUE)$values)
         if (egv[L] < psd * egv[1L])
         {
             cat("Non-PSD!\n")
@@ -205,7 +208,7 @@ pa2 <- function(vars, type=c(diag=1, rand=2, ones=3), alpha=NULL, beta=NULL, ...
 #' ## correlation / LD
 #' print(res$vcs)       # suggested
 #' sapply(res$dat, cor) # empirical
-sim_dsg <- function(model, N=5e2, psd=NULL)
+sim_dsg <- function(model, N, psd=NULL)
 {
     ## env <- environment()
     env <- parent.frame()

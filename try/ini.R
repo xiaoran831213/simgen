@@ -1,6 +1,6 @@
 library(CompQuadForm)
 library(MASS)
-library(bestNormalize)
+## library(bestNormalize)
 
 maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
 if(!exists("c17"))
