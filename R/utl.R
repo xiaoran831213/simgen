@@ -65,21 +65,35 @@ get.arg <- function(skp=NULL)
     f <- f[names(f) != "..."]
 
     ## calling arguments
-    a <- as.list(match.call(sys.function(1), sys.call(1), expand.dots=TRUE))
+    a <- as.list(match.call(sys.function(1), sys.call(1), expand.dots=TRUE))[-1]
+
+    ## default arguments
+    d <- setdiff(names(f), names(a))
+    a[d] <- f[d]
+
+    ## parsing
     a <- lapply(a[-1], function(.)
     {
         switch(class(.), call=eval(.), name=as.character(.), .)
     })
 
-    d <- setdiff(names(f), names(a))
-    a[d] <- f[d]
     
+    ## injected into the calling frame (i.e., mapply)
+    p <- parent.frame()
+    for(n in intersect(names(a), names(p)))
+    {
+        if(length(p[[n]]) != 1)
+            next
+        if(any(class(p[[n]]) != class(a[[n]])))
+            next
+        a[[n]] <- p[[n]]
+    }
     ## drop NULL
     a <- a[!sapply(a, is.null)]
 
     ## skip
     a <- a[!names(a) %in% skp]
-
+    
     ## return
     do.call(data.frame, c(a, list(stringsAsFactors=FALSE)))
 }

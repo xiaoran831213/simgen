@@ -19,25 +19,6 @@ asd <- function(g) apply(g, 2, sd)
 #' @noRd
 ffc <- function(f) attr(terms(f), "factors")
 
-
-#' Cached Real Genotype
-#' 
-#' A segment taken from from 1000 genome project.
-#'
-#' A continuous segment from chromosome 17  region q12, with no missed calls and
-#' minor allele frequency no less than 0.05.
-#'
-#' @name c17q12
-#' @noRd
-if(!exists("c17"))
-{
-    c17 <- readRDS(system.file("extdata", '17q12.rds', package="simgen"))
-    n17 <- nrow(c17)
-    m17 <- ncol(c17)
-    f17 <- maf(c17)
-}
-
-
 #' retain non-colinear variables
 #'
 #' Trim a correlation  matrix so the correlation among  remaining variables are
@@ -65,67 +46,6 @@ set.nan <- function(x, f=.1, nan=NA)
     x[sample.int(length(x), length(x) * f)] <- nan
     x
 }
-
-
-#' Genotype from 1000 Genome Project
-#'
-#' Randomly draw a segment from the 1000 Genome Project.
-#'
-#' @param N number of samples
-#' @param L number of SNPs
-#' @param psd positive definite threshold
-#' @param ucr upper correlation threshold
-kgp <- function(N, L, psd=NULL, ucr=NULL, MAF=0.05, MSD=NULL, ...)
-{
-    psd <- psd %||% sqrt(.Machine$double.eps)
-    ucr <- ucr %||% 0.99
-    MAF <- MAF %||% 0.05
-    MSD <- MSD %||% sqrt(2 * MAF * (1 - MAF)) * .8
-
-    ## L variants on demand, reserve 2 * L
-    P <- min(L * 5, m17)
-    while(TRUE)
-    {
-        i <- sample.int(n17, N, N > n17)            # N
-        j <- seq(sample(m17 - P, 1) + 1, l=P)       # P
-        gmx <- c17[i, j]                            # N x P
-        gmx <- gmx[, maf(gmx) >= MAF]               # minimum minor allele freq
-        gmx <- gmx[, asd(gmx) >= MSD]               # minimum allele SD
-        if(NCOL(gmx) < L)
-        {
-            P <- min(P + L - NCOL(gmx), m17)
-            cat("P = ", P, "\n", sep="")
-            next
-        }
-        ldm <- cor(gmx)                             # P x P
-        
-        ## drop  SNP  to  enforce  non-linearity;  if there  are  less  than  L
-        ## remaining, try again with a bigger reserve.
-        gmx <- gmx[, ncv(ldm, ucr=ucr, ...), drop=FALSE]
-        if(NCOL(gmx) < L)
-        {
-            P <- min(P + L - NCOL(gmx), m17)
-            cat("P = ", P, "\n", sep="")
-            next
-        }
-
-        ## select L variants now
-        j <- seq(sample(ncol(gmx) - L, 1) + 1, l=L)
-        gmx <- gmx[, j, drop=FALSE]
-        ldm <- cor(gmx)
-
-        ## if min(eigenvalue) < (threshold) * max(eigenvalue), try again
-        egv <- eigen(ldm, TRUE, TRUE)$values
-        if (egv[L] < psd * egv[1L])
-        {
-            cat("Non-PSD!\n")
-            next
-        }
-        break
-    }
-    gmx
-}
-
 
 #' Simulate variance covariance structure 
 #'
@@ -205,7 +125,7 @@ pa2 <- function(vars, type=c(diag=1, rand=2, ones=3), alpha=NULL, beta=NULL, ...
 #' ## correlation / LD
 #' print(res$vcs)       # suggested
 #' sapply(res$dat, cor) # empirical
-sim_dsg <- function(model, N=5e2, psd=NULL)
+sim_dsg <- function(model, N, psd=NULL)
 {
     ## env <- environment()
     env <- parent.frame()
