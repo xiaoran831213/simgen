@@ -1,5 +1,17 @@
 ## Genetype Management
 
+#' minor allele frequencies
+#'
+#' @param g genotype matrix, N row samples and M column variants
+#' @return MAF of M variants
+maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
+
+#' allele sandard deviation
+#'
+#' @param g genotype matrix, N row samples and M column variants
+#' @return SD of M variants
+asd <- function(g) apply(g, 2, sd)
+
 #' Cached Real Genotype
 #' 
 #' A segment taken from from 1000 genome project.
@@ -16,21 +28,6 @@ if(!exists("c17"))
     m17 <- ncol(c17)
     f17 <- maf(c17)
 }
-
-
-#' minor allele frequencies
-#'
-#' @param g genotype matrix, N row samples and M column variants
-#' @return MAF of M variants
-maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
-
-#' allele sandard deviation
-#'
-#' @param g genotype matrix, N row samples and M column variants
-#' @return SD of M variants
-asd <- function(g) apply(g, 2, sd)
-
-
 
 #' Genotype from 1000 Genome Project
 #'
