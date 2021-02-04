@@ -1,13 +1,26 @@
-sgm <- function(x)
+## gamma regression with log link
+gr <- function(frm)
 {
-    1 / (1 + exp(-x))
-}
-
-bin <- function(x)
-{
-    pi <- sgm(x)
-    pi[] <- rbinom(length(x), 1, pi)
-    pi
+    gct <- glm.control(epsilon=1e-6, maxit=100)
+    pvl <- par <- NA
+    fit <- try(glm(frm, Gamma("log"), control=gct), silent=TRUE)
+    if(!inherits(fit, 'try-error'))
+    {
+        par <- coef(fit)
+        if(length(par) > 2)
+        {
+            egv <- eigen(cor(model.matrix(fit)[, -1]), TRUE, TRUE)$values
+            qsm <- sum(summary(fit)$coef[-1, 3]^2)
+            pvl <- davies(qsm, egv)$Qq
+        }
+        else
+        {
+            pvl <- summary(fit)$coef[-1, 4]
+        }
+    }
+    else
+        fit <- message(fit)
+    list(mdl=frm, par=par, pvl=pvl, fit=fit)
 }
 
 mtq <- function(Z, C, D=NULL, tol.egv=NULL, ...)

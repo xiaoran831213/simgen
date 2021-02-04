@@ -1,6 +1,6 @@
 library(CompQuadForm)
 library(MASS)
-library(dglm)
+## library(dglm)
 ## library(bestNormalize)
 
 maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
