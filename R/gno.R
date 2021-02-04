@@ -18,6 +18,20 @@ if(!exists("c17"))
 }
 
 
+#' minor allele frequencies
+#'
+#' @param g genotype matrix, N row samples and M column variants
+#' @return MAF of M variants
+maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
+
+#' allele sandard deviation
+#'
+#' @param g genotype matrix, N row samples and M column variants
+#' @return SD of M variants
+asd <- function(g) apply(g, 2, sd)
+
+
+
 #' Genotype from 1000 Genome Project
 #'
 #' Randomly draw a segment from the 1000 Genome Project.
@@ -98,4 +112,26 @@ bng <- function(N, L=1, MAF=NULL, drop=TRUE, std=FALSE, ...)
     if(L > 1 || !drop)
         dim(gmx) <- c(N, L)
     gmx
+}
+
+#' Discretizing dosage by Hardy-Weinberg Equilibrium
+#'
+#' @param x matrix of allele dosages in continuous scale
+#' @param m vector of allele frequencies
+#' @return allele dosage in  {0, 1, 2}  with frequency {m^2, 2*m*(1-m), (1-m)^2}
+#' @noRd
+as.genotype <- function(x, m=NULL, ...)
+{
+    if (is.null(m))
+    {
+        m <- f17[sample(m17 - ncol(x), 1) + seq(ncol(x))]
+    }
+    for(j in seq(ncol(x)))
+    {
+        m2 <- m[j] * m[j]           # HWE freq of 0 allele
+        mn <- 2 * m[j] * (1 - m[j]) # HWE freq of 1 allele
+        qt <- quantile(x[, j], c(m2, m2 + mn))
+        x[, j] <- 2 - (x[, j] > qt[1]) - (x[, j] > qt[2])
+    }
+    x
 }
