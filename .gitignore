@@ -48,4 +48,4 @@ man/*
 NAMESPACE
 
 # link package R code into simulation folder
-try
+try/run
