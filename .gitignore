@@ -48,6 +48,4 @@ man/*
 NAMESPACE
 
 # link package R code into simulation folder
-try/R
-try/17q12.rds
-try/run
+try

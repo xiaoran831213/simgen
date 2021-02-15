@@ -1,7 +1,9 @@
 #' null or else operator
+#' @noRd
 `%||%` <- function(x, v) if(is.null(x) || length(x)==0) v else x
 
 #' concatenation operator
+#' @noRd
 `%c%` <- function(x, v) {x[[length(x) + 1]] <- v; x}
 
 #' Create data frame
@@ -57,7 +59,7 @@ flood <- function(x, e=parent.frame())
 #' @param skp arguments to skip.
 #'
 #' @return a data.frame of function arguments
-#' @noRd
+#' @export
 get.arg <- function(skp=NULL)
 {
     ## default arguments

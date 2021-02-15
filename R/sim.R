@@ -1,11 +1,35 @@
-#' get formula factors
+#' Compute Polynomials
 #'
-#' A convenience function equivalent to `attr(terms(f), "factors")`.
-#' 
-#' @param f the formula
-#' @return factors in the formula
-#' @noRd
-ffc <- function(f) attr(terms(f), "factors")
+#' @param x matrix of basic terms.
+#' @param d degrees to compute.
+#' @param t number of terms allowed.
+#' @param o use orthoganal transformation (def=FALSE).
+#' @return polynomial terms expanded from the given basic terms.
+#'
+#' @export
+.p <- function(x, d=NULL, t=NULL, o=FALSE)
+{
+    if(!is.matrix(x))
+        dim(x) <- c(length(x), 1L)
+    d <- d %||% 1
+    t <- t %||% seq.int(max(d))
+
+    ## get polynomial
+    x <- stats::poly(x, degree=max(d), raw=!o, simple=TRUE)
+
+    ## select by degree
+    x <- x[, attr(x, 'degree') %in% d, drop=FALSE]
+
+    ## select by terms
+    . <- rowSums(do.call(rbind, strsplit(colnames(x), "[.]")) != "0")
+    x <- x[, . %in% t, drop=FALSE]
+
+    ## clean up
+    attr(x, 'class') <- NULL
+    attr(x, 'degree') <- NULL
+
+    x
+}
 
 #' retain non-colinear variables
 #'
@@ -14,6 +38,7 @@ ffc <- function(f) attr(terms(f), "factors")
 #' @param ldm LD correlation matrix
 #' @param lcr lower correlation threshold
 #' @param ucr upper correlation threshold
+#' @param ... additional arguments (absorb and ignore)
 #' @return index of variables to be retained.
 ncv <- function(ldm, lcr=0, ucr=1, ...)
 {
@@ -29,6 +54,7 @@ ncv <- function(ldm, lcr=0, ucr=1, ...)
 #' @param f frequency of missing
 #' @param nan the NaN to use (def=NA).
 #' @return the incomplete observation of \code{x}
+#' @noRd
 set.nan <- function(x, f=.1, nan=NA)
 {
     x[sample.int(length(x), length(x) * f)] <- nan
@@ -48,7 +74,8 @@ sim_cor <- function(size, alpha=1, beta=alpha, tol.psd=NULL, ...)
     tol.psd <- tol.psd %||% sqrt(.Machine$double.eps)
     ## draw the lower triangle
     r <- matrix(0, size, size)
-    r[lower.tri(r)] <- 2 * rbeta(size * (size - 1) / 2, alpha, beta) - 1
+    n <- size * (size - 1) / 2
+    r[lower.tri(r)] <- 2 * rbeta(n, alpha, beta) - 1
     ## make correlation
     r <- r + t(r)
     ## enforce PD and diagonal
@@ -98,21 +125,20 @@ pa2 <- function(vars, type=c(diag=1, rand=2, ones=3), alpha=NULL, beta=NULL, ...
 
 #' Simulate design matrix
 #'
-#' @examples
-#' mu <- "X(2, 'n') + G(3, 'g')"
-#' sg <- "CX(X, 'r') + LD(G, a=8, b=1) + 0.1 @ XG(X+G, 'r')"
-#' fm <- as.formula(paste("~", mu, "|", sg))
-#' print(fm)
-#'
-#' res <- sim_dsg(fm, 1e3)
-#'
-#' ## data
-#' print(round(head(res$raw), 3))  # raw data
-#' print(round(head(res$dsg), 3))  # transformed
+#' @param model formula to specify the design matrices
+#' @param N sample size
+#' @param psd threshold of positive definite correlation
+#' @return list of parsed model and simulated data
 #' 
-#' ## correlation / LD
-#' print(res$vcs)       # suggested
-#' sapply(res$dat, cor) # empirical
+#' @examples
+#' ## print(sim_dsg)
+#' ## d <- sim_dsg(~X(2) + G(3, 'g') | CX(X, 'r') + LD(G, a=8, b=1) + 0.1 @ XG(X+G, 'r'), 1e3)
+#'
+#' ## print(round(head(d$raw), 3))  # raw data
+#' ## print(round(head(d$dsg), 3))  # transformed
+#' 
+#' ## print(d$vcs)       # suggested
+#' ## sapply(d$dat, cor) # empirical
 sim_dsg <- function(model, N, psd=NULL)
 {
     ## env <- environment()
@@ -184,16 +210,22 @@ sim_dsg <- function(model, N, psd=NULL)
 
 #' Simulate response
 #'
-#' mu <- "A(2, 'g') + B(3, 'g') + C(2, 'n') + D(2, 'n')"
-#' sg <- "Ph(A, 'd') + 2 @ LD(B, a=7, b=1) + .5 @ CV(B + C, a=1, b=6) + .2 @ JS(D, 'd')"
-#' fm <- as.formula(paste("~", mu, "|", sg))
-#' print(fm)
-#' dt <- sim_dsg(fm, 1e3)
-#' 
-#' md <- Y(4) + Z(2) ~ .5 @ A + .p(B, 2) + .5 @ B : C + D | .5 @ A
-#' md <- Y(4) + Z(2) ~ 0 @ A + .p(B, 2) + .5 @ B : C + D
-#' md <- Y(4) + Z(2) ~ 0 | .5 @ A + 2 @ .p(B, 2) + 2 @ B : C + D
-#' rs <- sim_rsp(md, dt$dat)
+#' @param model the data generation model in R formula.
+#' @param data a list or environment with data objects.
+#' @param ... additional arguments (absorb and ignore)
+#' @return a list of parsed model and response variable.
+#'
+#' @examples
+#' ## generate design matrix
+#' ## d <- sim_dsg(~A(3, 'g') + B(2, 'n') | LD(A, a=8, b=1) + CV(B, 'r') + .1 @ CF(B+C, 'r'), 1e3)
+#'
+#' ## generate 5 responses
+#' ## r <- sim_rsp(Y(3) + Z(2) ~ .5 @ A + .p(B, 2) + .5 @ A:B | .5 @ A, dt$dat)
+#' ## genotype A affects both mean and variance (i.e., vQTL)
+#'
+#' ## preview
+#' ## round(head(r$rsp), 3)
+#' @export
 sim_rsp <- function(model, data=NULL, ...)
 {
     if(is.null(data))
@@ -268,7 +300,7 @@ sim_rsp <- function(model, data=NULL, ...)
         . <- sapply(paste("~", tm2), as.formula, env=env)
         dt2 <- sapply(., frm_mtx, simplify = FALSE)
         sz2 <- lapply(dt2, ncol) # size(s)
-        dt2 <- do.call(cBind, dt2)
+        dt2 <- do.call(cbind, dt2)
     }
     
     ## -------- treat response --------
