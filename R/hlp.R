@@ -100,8 +100,14 @@ npd <- function (x, dg=NULL, tol.egv=1e-06, tol.cnv=1e-07, tol.psd=1e-08, max.it
     X_this
 }
 
-#' Short for scale()
-std <- function(x, c=TRUE, s=TRUE, ...)
+#' Standardize a matrix
+#'
+#' A shortened version of R function scale.
+#' 
+#' @param x a data matrix
+#' @param c center the columns? (def=TRUE)
+#' @param s scale the columns? (def=TRUE)
+std <- function(x, c=TRUE, s=TRUE)
 {
     r <- scale(x, center=c, scale=s)
     attr(r, 'scaled:center') <- NULL
