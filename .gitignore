@@ -49,3 +49,4 @@ NAMESPACE
 
 # link package R code into simulation folder
 try/run
+try/R
