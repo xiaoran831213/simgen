@@ -31,23 +31,6 @@
     x
 }
 
-#' retain non-colinear variables
-#'
-#' Trim a correlation  matrix so the correlation among  remaining variables are
-#' within specified thresholds.
-#' @param ldm LD correlation matrix
-#' @param lcr lower correlation threshold
-#' @param ucr upper correlation threshold
-#' @param ... additional arguments (absorb and ignore)
-#' @return index of variables to be retained.
-ncv <- function(ldm, lcr=0, ucr=1, ...)
-{
-    r <- abs(ldm)
-    r[upper.tri(r, TRUE)] <- lcr + (ucr - lcr) / 2
-    b <- which(lcr <= r & r <= ucr, arr.ind=TRUE)
-    apply(r, 2, function(.) all(lcr <= . & . <= ucr))
-}
-
 #' set random element to missing
 #'
 #' @param x true data

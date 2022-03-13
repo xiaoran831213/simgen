@@ -14,6 +14,28 @@ maf <- function(g) {a <- colMeans(g, na.rm=TRUE) / 2; pmin(a, 1 - a)}
 #' @export
 asd <- function(g) apply(g, 2, stats::sd)
 
+#' retain non-colinear variables
+#'
+#' Trim a correlation  matrix so the correlation among  remaining variables are
+#' within specified thresholds.
+#' @param ldm LD correlation matrix
+#' @param lcr lower correlation threshold
+#' @param ucr upper correlation threshold
+#' @param ... additional arguments (absorb and ignore)
+#' @return index of variables to be retained.
+ncv <- function(ldm, lcr=0, ucr=1, ...)
+{
+    if(lcr > 0 && ucr < 1)
+    {
+        r <- abs(ldm)
+        r[upper.tri(r, TRUE)] <- lcr + (ucr - lcr) / 2
+        b <- which(lcr <= r & r <= ucr, arr.ind=TRUE)
+        apply(r, 2, function(.) all(lcr <= . & . <= ucr))
+    }
+    else
+        rep(TRUE, ncol(ldm))
+}
+
 #' Genotype from 1000 Genome Project
 #'
 #' Randomly draw a segment from the 1000 Genome Project.
@@ -44,7 +66,7 @@ kgp <- function(N, L=1,
     itr <- kgp.itr %||% 20
 
     ## L variants on demand, reserve 2 * L
-    P <- min(L * 5, M17)
+    P <- min(L * 4, M17)
     while(itr)
     {
         i <- sample.int(N17, N, N > N17)          # N
@@ -63,32 +85,41 @@ kgp <- function(N, L=1,
                 cat("P = ", P, "\n", sep="")
             next
         }
-        ldm <- cor(gmx)                      # P x P
-
-        ## drop  SNP  to  enforce  non-linearity;  if there  are  less  than  L
-        ## remaining, try again with a bigger reserve.
-        gmx <- gmx[, ncv(ldm, ucr=ucr, ...), drop=FALSE]
-        if(NCOL(gmx) < L)
-        {
-            P <- min(P + L - NCOL(gmx), M17)
-            if(!quiet)
-                cat("P = ", P, "\n", sep="")
-            next
-        }
         
+        ## when N > L, prevent colinearity
+        if(N > L && psd > 0 && ucr < 1)
+        {
+            ldm <- cor(gmx)                      # P x P
+
+            ## drop  SNP  to  enforce  non-linearity;  if there  are  less  than  L
+            ## remaining, try again with a bigger reserve.
+            gmx <- gmx[, ncv(ldm, ucr=ucr, ...), drop=FALSE]
+            if(NCOL(gmx) < L)
+            {
+                P <- min(P + L - NCOL(gmx), M17)
+                if(!quiet)
+                    cat("P = ", P, "\n", sep="")
+                next
+            }
+        }
+            
         ## select L variants now
         j <- seq(sample(ncol(gmx) - L, 1) + 1, l=L)
         gmx <- gmx[, j, drop=drop]
-        ldm <- if(L > 1) cor(gmx) else 1
-        
-        ## if min(eigenvalue) < (threshold) * max(eigenvalue), try again
-        egv <- eigen(ldm, TRUE, TRUE)$values
-        if (egv[L] < psd * egv[1L])
+            
+        ## when N > L, prevent non-PD
+        if(N > L && psd > 0 && ucr < 1)
         {
-            if(!quiet)
-                cat("Non-PSD!\n")
-            itr <- itr - 1
-            next
+            ldm <- if(L > 1) cor(gmx) else 1
+            ## if min(eigenvalue) < (threshold) * max(eigenvalue), try again
+            egv <- eigen(ldm, TRUE, TRUE)$values
+            if (egv[L] < psd * egv[1L])
+            {
+                if(!quiet)
+                    cat("Non-PSD!\n")
+                itr <- itr - 1
+                next
+            }
         }
         break
     }
