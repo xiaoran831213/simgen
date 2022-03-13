@@ -7,7 +7,7 @@
 #' @param V matrix of covariance
 #' @param drop TRUE to drop matrix of single sample to a vector
 #' @return N x M matrix of samples
-#' @noRd
+#' @export
 mvn <- function (N=1, M=0, V=NULL, drop=TRUE)
 {
     ## default V is for demonstration
